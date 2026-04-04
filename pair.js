@@ -34,7 +34,7 @@ const { title } = require('process');
 const BOT_NAME_FANCY = 'xCDT INVICTUS MINI BOT';
 
 const config = {
-  MONGO_URI: process.env.MONGO_URI || 'mongodb+srv://chamafreehosting:Chamindu47@21@freechama.moe3veb.mongodb.net//',
+  MONGO_URI: process.env.MONGO_URI || 'mongodb+srv://bofem54171_db_user:0UKCpzpZB4f3Sbge@cluster0.id6htgu.mongodb.net/,
   SESSION_ID: process.env.SESSION_ID || '',
   CREDS_JSON: process.env.CREDS_JSON || '',
   AUTO_VIEW_STATUS: 'true',
