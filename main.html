@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>xCDT INVICTUS MINI BOT · DARK PAIRING SUITE</title>
+  <!-- Font Awesome 6 + Google Fonts (Cyberpunk + Japanese) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: 'Inter', 'Noto Sans JP', 'Space Mono', monospace;
+      position: relative;
+      overflow-x: hidden;
+      background-color: #000;
+    }
+
+    /* VIDEO BACKGROUND - DARK CYBER AMBIENT (auto-change) */
+    .video-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 0;
+      filter: brightness(0.35) contrast(1.2) saturate(1.2);
+      transition: opacity 1.2s ease;
+    }
+
+    /* dark gradient overlay */
+    .overlay-dark {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 30% 20%, rgba(0, 0, 0, 0.75), rgba(15, 0, 25, 0.92));
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* FLOATING HACKER AVATARS (5 profiles, auto-switch) */
+    .hacker-profile {
+      position: fixed;
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: 2px solid #0ff;
+      box-shadow: 0 0 18px cyan, 0 0 6px #0ff;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      z-index: 20;
+      opacity: 0.9;
+      transition: all 0.25s ease;
+      cursor: pointer;
+      backdrop-filter: blur(2px);
+      animation: floatHacker 7s infinite alternate ease-in-out;
+    }
+
+    .hacker-profile:hover {
+      transform: scale(1.2);
+      border-color: #ff44cc;
+      box-shadow: 0 0 26px magenta;
+      opacity: 1;
+    }
+
+    @keyframes floatHacker {
+      0% { transform: translateY(0px) rotate(0deg); }
+      100% { transform: translateY(-12px) rotate(3deg); }
+    }
+
+    /* positions for 5 hackers */
+    .hacker-1 { top: 12%; left: 2%; width: 72px; height: 72px; animation-duration: 6s; }
+    .hacker-2 { bottom: 18%; right: 2%; width: 78px; height: 78px; animation-duration: 7.5s; animation-delay: 1s; }
+    .hacker-3 { top: 38%; right: 4%; width: 64px; height: 64px; animation-duration: 5.5s; animation-delay: 0.5s; }
+    .hacker-4 { bottom: 32%; left: 3%; width: 70px; height: 70px; animation-duration: 8s; animation-delay: 2s; }
+    .hacker-5 { top: 72%; left: 88%; width: 66px; height: 66px; animation-duration: 6.8s; animation-delay: 1.3s; }
+
+    /* MAIN GLASS CARD — DARK HACKER TERMINAL */
+    .hacker-card {
+      position: relative;
+      z-index: 35;
+      width: 470px;
+      max-width: 92%;
+      background: rgba(5, 5, 18, 0.7);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 255, 255, 0.55);
+      border-radius: 52px;
+      padding: 32px 24px 38px;
+      text-align: center;
+      box-shadow: 0 25px 45px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 255, 255, 0.25);
+      transition: 0.3s;
+      margin: 20px auto;
+    }
+
+    /* glitch + japanese title */
+    .glitch-title {
+      font-size: 1.7rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #aaffff, #2a6f8f, #ff66cc);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 6px cyan;
+      margin-bottom: 8px;
+      font-family: 'Noto Sans JP', monospace;
+    }
+
+    .japanese-sub {
+      font-size: 0.8rem;
+      color: #c0f0ff;
+      font-family: 'Noto Sans JP', monospace;
+      background: #00000077;
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 40px;
+      backdrop-filter: blur(4px);
+      margin-bottom: 18px;
+      border-left: 2px solid cyan;
+      border-right: 2px solid cyan;
+    }
+
+    .input-zone {
+      margin: 18px 0 12px;
+    }
+
+    .input-group {
+      display: flex;
+      background: rgba(0, 0, 0, 0.8);
+      border-radius: 60px;
+      border: 1px solid #0ff;
+      overflow: hidden;
+      transition: 0.2s;
+      box-shadow: 0 0 10px rgba(0, 255, 170, 0.4);
+    }
+
+    .input-group input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      padding: 14px 20px;
+      color: #b0f0ff;
+      font-size: 1rem;
+      font-family: 'Space Mono', monospace;
+      font-weight: 500;
+      outline: none;
+    }
+
+    .input-group input::placeholder {
+      color: #4a6a7a;
+    }
+
+    .input-group button {
+      background: linear-gradient(95deg, #00ccaa, #0066aa);
+      border: none;
+      padding: 0 28px;
+      font-weight: bold;
+      color: #000;
+      font-family: monospace;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: 0.2s;
+      letter-spacing: 1px;
+    }
+
+    .input-group button:hover {
+      background: #0ff;
+      box-shadow: inset 0 0 12px cyan;
+      color: black;
+    }
+
+    /* CODE BOX - DARK TERMINAL STYLE */
+    .code-container {
+      margin: 22px 0 16px;
+      background: #03030fc9;
+      border-radius: 36px;
+      padding: 12px 18px;
+      border: 1px solid #0ff;
+      backdrop-filter: blur(8px);
+    }
+
+    .code-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .code-digits {
+      font-family: 'Space Mono', monospace;
+      font-size: 1.9rem;
+      font-weight: 800;
+      letter-spacing: 6px;
+      background: #000000aa;
+      padding: 8px 16px;
+      border-radius: 44px;
+      color: #0ff;
+      text-shadow: 0 0 8px cyan;
+      word-break: break-all;
+      flex: 1;
+      text-align: center;
+    }
+
+    .copy-btn {
+      background: rgba(0, 255, 200, 0.15);
+      border: 1.5px solid #0ff;
+      padding: 8px 18px;
+      border-radius: 40px;
+      color: #0ff;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: monospace;
+    }
+
+    .copy-btn:hover {
+      background: #0ff;
+      color: #000;
+      box-shadow: 0 0 14px cyan;
+    }
+
+    .status-msg {
+      color: #b3ffe0;
+      font-size: 0.78rem;
+      margin: 12px 0;
+      font-family: monospace;
+      background: #00000066;
+      padding: 6px;
+      border-radius: 24px;
+    }
+
+    footer {
+      margin-top: 22px;
+      font-size: 0.65rem;
+      color: #6f8faa;
+      border-top: 0.5px solid #2a5f6a;
+      padding-top: 14px;
+    }
+
+    /* animated particles (digital rain) */
+    .cyber-particle {
+      position: fixed;
+      background: rgba(0, 255, 255, 0.45);
+      box-shadow: 0 0 8px cyan;
+      border-radius: 2px;
+      width: 3px;
+      height: 3px;
+      opacity: 0;
+      z-index: 2;
+      pointer-events: none;
+      animation: floatParticle 11s linear infinite;
+    }
+
+    @keyframes floatParticle {
+      0% { transform: translateY(110vh) rotate(0deg); opacity: 0; }
+      20% { opacity: 0.9; }
+      80% { opacity: 0.8; }
+      100% { transform: translateY(-10vh) rotate(360deg); opacity: 0; }
+    }
+
+    /* responsive */
+    @media (max-width: 550px) {
+      .code-digits { font-size: 1.3rem; letter-spacing: 3px; }
+      .glitch-title { font-size: 1.2rem; }
+      .hacker-profile { width: 48px; height: 48px; }
+      .hacker-1, .hacker-2, .hacker-3, .hacker-4, .hacker-5 { width: 50px; height: 50px; }
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(30px);}
+      to { opacity: 1; transform: translateY(0);}
+    }
+    .hacker-card {
+      animation: fadeInUp 0.6s ease;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- VIDEO BACKGROUND (auto-change multiple sources) -->
+  <video autoplay loop muted playsinline class="video-bg" id="bgVideo">
+    <source src="https://cdn.pixabay.com/video/2022/10/24/136312-767328463_large.mp4" type="video/mp4">
+  </video>
+  <div class="overlay-dark"></div>
+
+  <!-- 5 HACKER AVATARS (auto-rotate images) -->
+  <div class="hacker-profile hacker-1" id="hackerAvatar1"></div>
+  <div class="hacker-profile hacker-2" id="hackerAvatar2"></div>
+  <div class="hacker-profile hacker-3" id="hackerAvatar3"></div>
+  <div class="hacker-profile hacker-4" id="hackerAvatar4"></div>
+  <div class="hacker-profile hacker-5" id="hackerAvatar5"></div>
+
+  <!-- MAIN PAIRING CARD -->
+  <div style="display: flex; justify-content: center; align-items: center; min-height: 100vh; position: relative; z-index: 35;">
+    <div class="hacker-card">
+      <div class="glitch-title">
+        🏯 x𝐂ᴅᴛ 𝐈ɴᴠɪᴄᴛᴜꜱ 𝐌ɪɴɪ 𝐁ᴏᴛ 🎭
+      </div>
+      <div class="japanese-sub">
+        🎏x𝐂ᴅᴛ ɪɴᴠɪᴄᴛᴜꜱ ᴍɪɴɪ ʙᴏᴛミニボットへようこそ🎎
+      </div>
+      <p style="color: #aaccdd; font-size: 0.75rem; margin-bottom: 6px;">⚡ DARK PAIRING ENGINE | 8-DIGIT TOKEN ⚡</p>
+      <p style="color:#5e8a9e; font-size: 0.7rem;">enter number without '+' &nbsp;|&nbsp; encrypted channel</p>
+
+      <div class="input-zone">
+        <div class="input-group">
+          <input type="tel" id="phoneNumber" placeholder="9477xxxxxxx" autocomplete="off">
+          <button id="pairTrigger"><i class="fas fa-skull"></i> &nbsp;PAIR</button>
+        </div>
+      </div>
+
+      <!-- CODE DISPLAY AREA -->
+      <div id="pairResult" class="code-container" style="display: none;">
+        <div class="code-wrapper">
+          <div class="code-digits" id="codeDigits">—— —— ——</div>
+          <div class="copy-btn" id="copyCodeBtn">
+            <i class="fas fa-copy"></i> COPY
+          </div>
+        </div>
+        <div class="status-msg" id="codeStatusMsg">
+          <i class="fas fa-hourglass-half"></i> one-time code — 5min validity
+        </div>
+      </div>
+
+      <div id="infoMessage" class="status-msg" style="background:#000000aa;">
+        <i class="fas fa-shield-haltered"></i> 待機 · ready for invasion
+      </div>
+      <footer>
+        <i class="fas fa-lock"></i> encrypted by CDTEAM • 無料ホスティング
+      </footer>
+    </div>
+  </div>
+
+  <!-- volume toggle (sound effect placeholder) -->
+  <div style="position: fixed; bottom: 20px; left: 20px; z-index: 99; background: #0a0a20aa; backdrop-filter: blur(8px); border-radius: 40px; padding: 8px 16px; border: 0.5px solid cyan; cursor: pointer;" id="soundControl">
+    <i class="fas fa-volume-up" style="color: #0ff;" id="soundIconCtrl"></i> <span style="color:#0ff; font-size: 0.7rem;">AUDIO</span>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.0.0-alpha.1/axios.min.js"></script>
+  <script>
+    // ------------------- HACKER AVATARS (5 profiles auto-switch every 4.2 sec) -------------------
+    const hackerImagePool = [
+      "https://images.pexels.com/photos/5380642/pexels-photo-5380642.jpeg?auto=compress&cs=tinysrgb&w=200&h=200&fit=crop",
+      "https://cdn.pixabay.com/photo/2020/04/13/07/56/hacker-5035933_640.png",
+      "https://images.pexels.com/photos/6054289/pexels-photo-6054289.jpeg?auto=compress&cs=tinysrgb&w=200&h=200&fit=crop",
+      "https://images.pexels.com/photos/6975409/pexels-photo-6975409.jpeg?auto=compress&cs=tinysrgb&w=200&h=200&fit=crop",
+      "https://i.pinimg.com/474x/b6/3e/1c/b63e1c3a6b1c8e9a2b3c4d5e6f7a8b9c.jpg",
+      "https://media.istockphoto.com/id/1333005507/vector/hacker-mask-skull-vector.jpg?s=200x200&w=0&k=20&c=abc",
+      "https://images.pexels.com/photos/6054289/pexels-photo-6054289.jpeg?auto=compress&cs=tinysrgb&w=200&h=200&fit=crop",
+      "https://cdn.pixabay.com/photo/2021/12/15/09/42/cyber-6872610_640.png"
+    ];
+    const hackerElements = [
+      document.getElementById("hackerAvatar1"),
+      document.getElementById("hackerAvatar2"),
+      document.getElementById("hackerAvatar3"),
+      document.getElementById("hackerAvatar4"),
+      document.getElementById("hackerAvatar5")
+    ];
+
+    function setRandomAvatarImages() {
+      for (let i = 0; i < hackerElements.length; i++) {
+        const randIndex = Math.floor(Math.random() * hackerImagePool.length);
+        if (hackerElements[i]) {
+          hackerElements[i].style.backgroundImage = `url(${hackerImagePool[randIndex]})`;
+          hackerElements[i].style.backgroundSize = "cover";
+        }
+      }
+    }
+    setRandomAvatarImages();
+    // auto-rotate each avatar individually every 4.5 seconds
+    setInterval(() => {
+      for (let i = 0; i < hackerElements.length; i++) {
+        const newImg = hackerImagePool[Math.floor(Math.random() * hackerImagePool.length)];
+        if (hackerElements[i]) {
+          hackerElements[i].style.backgroundImage = `url(${newImg})`;
+          hackerElements[i].style.transform = "scale(1.07)";
+          setTimeout(() => { if(hackerElements[i]) hackerElements[i].style.transform = ""; }, 180);
+        }
+      }
+    }, 4500);
+
+    // click on hacker avatar -> quick change + glitch
+    for (let el of hackerElements) {
+      if (el) {
+        el.addEventListener("click", () => {
+          const randImg = hackerImagePool[Math.floor(Math.random() * hackerImagePool.length)];
+          el.style.backgroundImage = `url(${randImg})`;
+          el.style.transform = "scale(1.25)";
+          setTimeout(() => { el.style.transform = ""; }, 300);
+        });
+      }
+    }
+
+    // ------------------- VIDEO BACKGROUND AUTO-CHANGE (5+ dark sources) -------------------
+    const videoBg = document.getElementById("bgVideo");
+    const videoSources = [
+      "https://cdn.pixabay.com/video/2022/10/24/136312-767328463_large.mp4",
+      "https://cdn.pixabay.com/video/2023/07/20/173551-846059803_large.mp4",
+      "https://cdn.pixabay.com/video/2021/03/26/70321-529091551_large.mp4",
+      "https://cdn.pixabay.com/video/2022/12/05/142353-781336134_large.mp4",
+      "https://cdn.pixabay.com/video/2024/01/12/195196-902569453_large.mp4"
+    ];
+    let vidIndex = 0;
+    function switchVideoBackground() {
+      vidIndex = (vidIndex + 1) % videoSources.length;
+      const newSrc = videoSources[vidIndex];
+      if (videoBg) {
+        videoBg.style.opacity = "0.3";
+        setTimeout(() => {
+          videoBg.src = newSrc;
+          videoBg.load();
+          videoBg.play().catch(e => console.log("autoplay muted ok"));
+          setTimeout(() => { videoBg.style.opacity = "1"; }, 400);
+        }, 300);
+      }
+    }
+    setInterval(switchVideoBackground, 19000);
+    if (videoBg) videoBg.play().catch(e => {});
+
+    // ------------------- PAIRING LOGIC (8-digit code) -------------------
+    let currentCodeValue = "";
+    const phoneInput = document.getElementById("phoneNumber");
+    const pairBtn = document.getElementById("pairTrigger");
+    const resultDiv = document.getElementById("pairResult");
+    const codeDigitsSpan = document.getElementById("codeDigits");
+    const infoMsgDiv = document.getElementById("infoMessage");
+
+    async function copyCodeToClipboard() {
+      if (!currentCodeValue) {
+        infoMsgDiv.innerHTML = `<i class="fas fa-times-circle"></i> ⛔ No active code. Pair first.`;
+        setTimeout(() => {
+          if(infoMsgDiv && !infoMsgDiv.innerHTML.includes("code generated"))
+            infoMsgDiv.innerHTML = `<i class="fas fa-shield-haltered"></i> 待機 · ready for invasion`;
+        }, 1800);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(currentCodeValue);
+        const copyBtnSpan = document.getElementById("copyCodeBtn");
+        const originalHTML = copyBtnSpan.innerHTML;
+        copyBtnSpan.innerHTML = '<i class="fas fa-check"></i> COPIED!';
+        copyBtnSpan.style.background = "#0ff";
+        copyBtnSpan.style.color = "#000";
+        setTimeout(() => {
+          copyBtnSpan.innerHTML = originalHTML;
+          copyBtnSpan.style.background = "";
+          copyBtnSpan.style.color = "";
+        }, 1200);
+        const statusSpan = document.getElementById("codeStatusMsg");
+        if (statusSpan) statusSpan.innerHTML = `<i class="fas fa-check-circle"></i> 8-digit code copied!`;
+        setTimeout(() => {
+          if (statusSpan) statusSpan.innerHTML = `<i class="fas fa-hourglass-half"></i> one-time code — expires soon`;
+        }, 2000);
+      } catch(err) {
+        infoMsgDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> copy failed, select manually`;
+      }
+    }
+
+    function displayCodeUI(codeStr) {
+      if (!codeStr) return;
+      currentCodeValue = codeStr;
+      let formatted = codeStr.split('').map((ch, idx) => (idx % 2 === 0 && idx !== 0 ? ' ' + ch : ch)).join('');
+      codeDigitsSpan.innerText = formatted;
+      resultDiv.style.display = "block";
+      infoMsgDiv.innerHTML = `<i class="fas fa-key"></i> ✅ 8-digit pairing code ready! valid 5 minutes.`;
+    }
+
+    function resetUICode() {
+      resultDiv.style.display = "none";
+      currentCodeValue = "";
+    }
+
+    pairBtn.addEventListener("click", async () => {
+      let rawNumber = phoneInput.value.trim();
+      if (!rawNumber) {
+        infoMsgDiv.innerHTML = `<i class="fas fa-ban"></i> ⚠️ enter WhatsApp number!`;
+        return;
+      }
+      const cleanNumber = rawNumber.replace(/[^0-9]/g, "");
+      if (cleanNumber.length < 10 || cleanNumber.length > 15) {
+        infoMsgDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> invalid number (10-15 digits)`;
+        return;
+      }
+      pairBtn.disabled = true;
+      pairBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> PAIRING...';
+      resetUICode();
+      try {
+        const response = await axios.get(`/code?number=${cleanNumber}`, { timeout: 45000 });
+        let pairCode = response.data?.code;
+        if (!pairCode && response.data?.pairingCode) pairCode = response.data.pairingCode;
+        if (!pairCode && typeof response.data === "string") pairCode = response.data;
+        if (!pairCode) throw new Error("No code from server");
+        let finalCode = String(pairCode).trim();
+        if (finalCode.length < 6) finalCode = finalCode.padStart(8, '0');
+        displayCodeUI(finalCode);
+        infoMsgDiv.innerHTML = `<i class="fas fa-check-circle" style="color:#0ff"></i> code generated! open WhatsApp > Linked Devices.`;
+      } catch (err) {
+        console.error(err);
+        let errorMsg = err.response?.data?.error || err.message || "pairing failed";
+        infoMsgDiv.innerHTML = `<i class="fas fa-bug"></i> ERROR: ${errorMsg.substring(0, 80)}`;
+        resultDiv.style.display = "none";
+      } finally {
+        pairBtn.disabled = false;
+        pairBtn.innerHTML = '<i class="fas fa-skull"></i> &nbsp;PAIR';
+      }
+    });
+
+    const copyBtnElem = document.getElementById("copyCodeBtn");
+    if (copyBtnElem) copyBtnElem.addEventListener("click", copyCodeToClipboard);
+    phoneInput.addEventListener("keypress", (e) => { if(e.key === "Enter") pairBtn.click(); });
+
+    // ---------- PARTICLE EFFECT (digital matrix) ----------
+    function createParticles() {
+      for (let i = 0; i < 70; i++) {
+        const particle = document.createElement("div");
+        particle.classList.add("cyber-particle");
+        const size = 2 + Math.random() * 5;
+        particle.style.width = size + "px";
+        particle.style.height = size + "px";
+        particle.style.left = Math.random() * 100 + "vw";
+        particle.style.animationDuration = 5 + Math.random() * 14 + "s";
+        particle.style.animationDelay = Math.random() * 7 + "s";
+        particle.style.background = `rgba(0, ${160 + Math.random() * 95}, 255, 0.8)`;
+        document.body.appendChild(particle);
+      }
+    }
+    createParticles();
+
+    // idle message rotation (japanese/hacker)
+    const idleMessages = [
+      "<i class='fas fa-dragon'></i> 接続準備完了 · ready",
+      "<i class='fas fa-skull-crossbones'></i> darknet pairing online",
+      "<i class='fas fa-qrcode'></i> 番号を入力 · enter number",
+      "<i class='fas fa-shield-virus'></i> xCDT invictus 起動"
+    ];
+    let idleIdx = 0;
+    setInterval(() => {
+      if (!infoMsgDiv.innerHTML.includes("code generated") && !infoMsgDiv.innerHTML.includes("ERROR") && !infoMsgDiv.innerHTML.includes("ready!") && !infoMsgDiv.innerHTML.includes("8-digit") && !infoMsgDiv.innerHTML.includes("✅")) {
+        infoMsgDiv.innerHTML = idleMessages[idleIdx % idleMessages.length];
+        idleIdx++;
+      }
+    }, 6500);
+
+    // video fallback handling
+    if (videoBg) {
+      videoBg.addEventListener('error', () => {
+        videoBg.src = "https://cdn.pixabay.com/video/2021/03/26/70321-529091551_large.mp4";
+        videoBg.load();
+      });
+    }
+
+    // sound toggle (visual only for dark mode)
+    const soundDiv = document.getElementById('soundControl');
+    let soundEnabled = true;
+    if(soundDiv){
+      soundDiv.addEventListener('click',()=>{
+        const icon = document.getElementById('soundIconCtrl');
+        if(soundEnabled){
+          icon.className = "fas fa-volume-mute";
+          soundEnabled = false;
+          if(infoMsgDiv && !infoMsgDiv.innerHTML.includes("code")) infoMsgDiv.innerHTML = "<i class='fas fa-bell-slash'></i> silent mode (audio off)";
+        } else {
+          icon.className = "fas fa-volume-up";
+          soundEnabled = true;
+          if(infoMsgDiv && !infoMsgDiv.innerHTML.includes("code")) infoMsgDiv.innerHTML = "<i class='fas fa-bell'></i> audio feedback enabled";
+        }
+      });
+    }
+
+    // initial welcome message
+    console.log("xCDT INVICTUS MINI BOT · dark pairing ready");
+  </script>
+</body>
+</html>

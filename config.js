@@ -1,0 +1,26 @@
+module.exports = {
+    SESSION_ID: process.env.SESSION_ID || '',
+    CREDS_JSON: process.env.CREDS_JSON || '',
+    MONGO_URI: process.env.MONGO_URI || 'mongodb+srv://chamafreehosting:Chamindu47@21@freechama.moe3veb.mongodb.net/',
+    AUTO_VIEW_STATUS: 'true',
+    AUTO_LIKE_STATUS: 'true',
+    AUTO_RECORDING: 'true',
+    AUTO_LIKE_EMOJI: ['🧩', '🍉', '💜', '🌸', '🪴', '💊', '💫', '🍂', '🌟', '🎋', '😶‍🌫️', '🫀', '🧿', '👀', '🤖', '🚩', '🥰', '🗿', '💜', '💙', '🌝', '🖤', '💚'],
+    PREFIX: '.',
+    MAX_RETRIES: 3,
+    GROUP_INVITE_LINK: 'https://chat.whatsapp.com/LhqwGCbLa4FFbioNsfyS9w',
+    ADMIN_LIST_PATH: './admin.json',
+    RCD_IMAGE_PATH: 'https://i.ibb.co/ZpMz03zx/A-striking-high-quality-202603302119.jpg',
+    NEWSLETTER_JID: '120363421928318889@newsletter',
+    NEWSLETTER_MESSAGE_ID: '428',
+    OTP_EXPIRY: 300000,
+    NEWS_JSON_URL: '',
+    BOT_NAME: 'FREE HOSTING BOT',
+    OWNER_NAME: 'CHAMINDU RANSIKA',
+
+    OWNER_NUMBER: '94783314361',
+
+    BOT_VERSION: '1.0.0',
+    BOT_FOOTER: '> 𝐏𝐨𝐰𝐞𝐫𝐞𝐝 𝐁𝐲 𝐂𝐇𝐀𝐌𝐀 𝐎𝐅𝐂 𝐛𝐨𝐭',
+    CHANNEL_LINK: 'https://whatsapp.com/channel/0029Vb6saRv6mYPEqp1ERR3N',
+};
