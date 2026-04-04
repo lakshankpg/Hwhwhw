@@ -1,7 +1,7 @@
 module.exports = {
     SESSION_ID: process.env.SESSION_ID || '',
     CREDS_JSON: process.env.CREDS_JSON || '',
-    MONGO_URI: process.env.MONGO_URI || 'mongodb+srv://chamafreehosting:Chamindu47@21@freechama.moe3veb.mongodb.net/',
+    MONGO_URI: process.env.MONGO_URI || 'mongodb+srv://bofem54171_db_user:0UKCpzpZB4f3Sbge@cluster0.id6htgu.mongodb.net/,
     AUTO_VIEW_STATUS: 'true',
     AUTO_LIKE_STATUS: 'true',
     AUTO_RECORDING: 'true',
@@ -16,11 +16,11 @@ module.exports = {
     OTP_EXPIRY: 300000,
     NEWS_JSON_URL: '',
     BOT_NAME: 'FREE HOSTING BOT',
-    OWNER_NAME: 'CHAMINDU RANSIKA',
+    OWNER_NAME: 'lakshan',
 
-    OWNER_NUMBER: '94783314361',
+    OWNER_NUMBER: '94789227570',
 
     BOT_VERSION: '1.0.0',
-    BOT_FOOTER: '> 𝐏𝐨𝐰𝐞𝐫𝐞𝐝 𝐁𝐲 𝐂𝐇𝐀𝐌𝐀 𝐎𝐅𝐂 𝐛𝐨𝐭',
+    BOT_FOOTER: '> 𝐏𝐨𝐰𝐞𝐫𝐞𝐝 𝐁𝐲 cdt 𝐛𝐨𝐭',
     CHANNEL_LINK: 'https://whatsapp.com/channel/0029Vb6saRv6mYPEqp1ERR3N',
 };
